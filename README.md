@@ -71,4 +71,4 @@ With output options turned on in `config.in`, results are written under **`Outpu
 
 ---
 
-If you use this code in academic work, please cite your thesis or related publication when it is available, and link to this repository.
+
