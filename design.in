@@ -1,0 +1,68 @@
+
+structure_linestyle_mapping = {
+    'Bhatia_01': '-',   # solid
+    'Bhatia_02': '--',  # dashed
+    'Bhatia_03': '-.',  # dash-dot
+    'CS400':  '-' ,
+    'CS1000': '-',
+    'CS1000a': '-',
+}
+
+structure_color_mapping = {
+    'Bhatia_01': '#66C2A5',  
+    'Bhatia_02': '#FC8D62',  
+    'Bhatia_03': '#8DA0CB', 
+    'CS400':  '#E78AC3',
+    'CS1000': '#A6D854',
+    'CS1000a': '#FFD92F',
+}
+fit_type_linestyle_mapping = {
+    'Sips':                '-',
+    'Langmuir_Freundlich': '--',
+    'Toth':                ':',
+}
+
+# Marker per molecule
+molecule_marker_mapping = {
+    'R32':   'o', #'^',  # circle
+    'R134a': 'o', #'s',  # square
+    'R125':  'o',  # triangle
+    'butane': 'o', #'D',
+    'R417A': 'v',
+    'R417C': 'v',
+    'R410A': 'v',
+    'R407F': 'v',
+}
+
+molecule_linestyle_mapping = {
+    'R32': '-',   # solid
+    'R125': '--',  # dashed
+    'R134a': '-.',  # dash-dot
+    'butane':  (0, (5, 1)) ,
+    'R417A': (0, (3, 1, 1, 1)),
+    'R417C': ':',
+}
+
+# Optional: per-molecule colors (overrides temperature-based colors)
+molecule_color_mapping = {
+    'R32':   '#66C2A5',  
+    'R134a': '#FC8D62', 
+    'R125':  '#8DA0CB',  
+    'R600': '#E41A1C',
+    'R417A': '#FFD92F',
+    'R417C': '#FFD92F',
+    'R410A': '#FFD92F',
+    'R407F': '#FFD92F',
+}
+
+
+temperature_color_mapping = {
+    283: '#E41A1C',   # red
+    303: '#377EB8',   # blue
+    333: '#4DAF4A',   # green
+    353: '#FF7F00',   # orange
+}
+
+# Storage-density 3D colorbar 
+storage_density_3d_colormap = 'viridis'
+storage_density_3d_boundries = None         #(min, max)
