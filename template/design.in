@@ -1,0 +1,33 @@
+# design.in — optional plot styling (Python literals; merged over Code/Input.py defaults).
+# Empty {} = no named entries → PlotHelpers picks linestyle/marker/color by order. Omit a whole block to use Input defaults unchanged.
+
+# framework → linestyle (default: cycle '-', '--', '-.', ':')
+structure_linestyle_mapping = {
+}
+
+# framework → color
+structure_color_mapping = {
+}
+
+# fit type (e.g. Sips) → linestyle
+fit_type_linestyle_mapping = {
+}
+
+# molecule → marker
+molecule_marker_mapping = {
+}
+
+# molecule → linestyle
+molecule_linestyle_mapping = {
+}
+
+# molecule → color (overrides temperature-based colors)
+molecule_color_mapping = {
+}
+
+# temperature (K) → color (default: Set1-style order palette)
+temperature_color_mapping = {
+}
+
+# Optional SD 3D overrides: storage_density_3d_colormap (default 'viridis'),
+# storage_density_3d_boundries (default None; spelling matches code). More keys: Input.py / PlotHelpers.

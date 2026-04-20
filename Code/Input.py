@@ -228,12 +228,22 @@ def _hoa_flag_token(v):
 _heat_hoa = _hoa_flag_token(read_input_file.get('HEAT_OF_ADSORPTION'))
 _mix_hoa = _hoa_flag_token(read_input_file.get('HEAT_OF_ADSORPTION_MIX'))
 
+
+def _storage_density_dimension_str(raw):
+    """Comma-separated STORAGE_DENSITY_DIMENSION is parsed as a list by _parse_val; join for token parsing in Main."""
+    if raw is None:
+        return ''
+    if isinstance(raw, list):
+        return ','.join(str(x).strip().lower() for x in raw if str(x).strip())
+    return str(raw).strip().lower()
+
+
 plot_flags = {
     'Virial':                  _heat_hoa in ('virial', 'both'),
     'Clausius_Clapeyron':      _heat_hoa in ('cc', 'both'),
     'HOA_From_File':           _heat_hoa in ('data_file', 'both'),
     'Storage_Density_Method':  _hoa_flag_token(read_input_file.get('STORAGE_DENSITY')),
-    'Storage_Density_Dim':     str(read_input_file.get('STORAGE_DENSITY_DIMENSION', '')).strip().lower(),
+    'Storage_Density_Dim':     _storage_density_dimension_str(read_input_file.get('STORAGE_DENSITY_DIMENSION', '')),
     'Mixture_CC':              _mix_hoa in ('cc', 'both'),
     'Mixture_HOA_Pure_CC':     _mix_hoa in ('hoa_pure_cc',    'both'),
     'Mixture_HOA_Pure_Virial': _mix_hoa in ('hoa_pure_virial', 'both'),
