@@ -4,6 +4,8 @@ Python workflow for **mixed-gas adsorption**: adsorption isotherm (Toth, Langmui
 
 The pipeline for the code, as described in the figure below
 
+![Workflow](Workflow.png)
+
 ##  Configuration
 
 | File | Role |
@@ -11,7 +13,7 @@ The pipeline for the code, as described in the figure below
 | **`config.in`** | Defines the adsorbent/adsorbate system, temperatures, pressure range, isotherm model settings, data sources, HOA and storage‑density modes, virial configuration, and output options. |
 | **`design.in`** | Plot styling: colours, line styles, markers, colormaps for structures, molecules, temperatures, and 3D storage‑density figures. Default available|
 
-## Important keys in `config.in`
+Important keys in `config.in`
 ### **Data & system definition**
 - **`ADSORBENT` / `ADSORBATE`** — names of the adsorbent–adsorbate system, matching the identifiers in the data input. Automatically detects pure vs. mixture adsorbates.  
 - **`TEMPERATURE`** — temperatures at which adsorption isotherm data are provided.  
@@ -62,7 +64,6 @@ Formats are defined by the reader logic in `Code/Input.py` and the rest of the p
 
 With output options turned on in `config.in`, results are written under **`Output/<case_label>/`** (naming depends on adsorbent, adsorbate, temperatures, and similar selections). Typical artefacts include figures (PNG/PDF as configured) and summary text files.
 
-![Workflow](Workflow.png)
 
 
 ## Requirements
