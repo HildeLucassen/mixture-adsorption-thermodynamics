@@ -574,8 +574,6 @@ if _want_dataset:
         if _rows:
             data_points_virial = _rows
             raspa_for_cc = _rows
-            _save_pn = _settings_out_dir / "Basic_Data" / "saved" / "dataset_Pn_points.txt"
-            ds.save_dataset(_rows, _save_pn)
     except Exception as _e:
         print(f"Warning: DataSelection failed ({_e}); Virial/CC use raw input data.")
 

@@ -36,10 +36,20 @@ Important keys in `config.in`
   - `both` — cc + pure‑virial + pure‑cc
 
 ### **Storage‑density settings**
-- **`STORAGE_DENSITY`** — pressure‑swing, temperature‑swing, or pressure–temperature swing.  
-  Options: `virial`, `cc`, `file`, or `both`.  
+- **`STORAGE_DENSITY`** — which thermodynamic route is used for the isosteric heat inside the storage‑density integral: `cc` (Clausius–Clapeyron), `virial`, `file` (from HOA file), or `both`. This is separate from the *swing scenario* below, which is determined by how each figure is built.  
 - **`STORAGE_DENSITY_DIMENSION`** — `2D` or `3D`.  
 - **`STORAGE_DENSITY_PARAMETERS`** — additional parameters for storage‑density calculations.
+
+**Output filenames (2D / 3D under `Output/.../Storage_Density/`)** use short stems so the swing scenario is visible in the name. The middle token is the method (`cc`, `virial`, or shortened tokens such as `hpv` / `hpc` for some mixture HOA paths):
+
+| Stem (examples) | Swing scenario |
+|-----------------|----------------|
+| **`sd_PS_Teq_*`** | **Pressure swing**, fixed adsorption pressure \(P_\mathrm{ads}\), with **\(T_\mathrm{ads} = T_\mathrm{des}\)** along each curve; desorption pressure is swept. |
+| **`sd_TS_Peq_*`** | **Temperature swing**, **\(P_\mathrm{ads} = P_\mathrm{des}\)** at each abscissa; fixed \(T_\mathrm{ads}\) with several \(T_\mathrm{des}\) (and pressure) on the plot. |
+| **`sd_PTS_fixedPads_*`** | **Combined pressure–temperature swing**, fixed **\(P_\mathrm{ads}\)** (and fixed \(T_\mathrm{ads}\) for adsorption loading) while **\(T_\mathrm{des}\)** and **\(P_\mathrm{des}\)** vary. |
+| **`sd_Tads_Tdes_*_3d`** (3D only) | Surface over **\(T_\mathrm{ads}\) × \(T_\mathrm{des}\)** at fixed pressures — not one of the three swing stems above, but the same folder tree. |
+
+3D surfaces append **`_3d`** before the framework/molecule suffix in the filename (e.g. `sd_PS_Teq_cc_3d_...png`).
 
 ### **Virial configuration**
 - **`SUGGESTION_VIRIAL`** — `yes`/`no`; if `yes`, selects polynomial degrees automatically based on highest rounded‑off R² for lower degrees.  

@@ -1,0 +1,44 @@
+# Example 2 — Mixture adsorption (R407F on Bhathia_01)
+
+This folder holds a **mixture** workflow: equilibrium **simulation points** for several species and temperatures, **mixture HOA** (Clausius–Clapeyron–based paths), and **storage density** from the **CC** route in **2D and 3D**.
+
+## System and data
+
+- **Adsorbent:** `Bhathia_01`  
+- **Mixture label:** `R407F` (used as the mixture name in plots and outputs; the table includes **pure** and **mixture** rows for the blend components).  
+- **Temperatures:** 283, 303, 333, and 353 K  
+- **Isotherm model (for fits built from points):** Sips, **two** sites (`NUM_ISOTHERM_SITES` = 2)  
+- **Input:** `Input/data_points.txt` — tabulated **P–loading** data (RASPA-style layout: structure, molecule, mixture/pure, temperature, pressure, loading).  
+- **Data mode:** `DATA_SOURCE = points` (no `DATA_FILE_FITTING` in this example; the pipeline builds what it needs from the points file).
+
+## What this `config.in` enables
+
+- **Mixture heat of adsorption (`HEAT_OF_ADSORPTION_MIX = cc, hoa_pure_cc`):**  
+  - **`cc`** — mixture HOA from the **Clausius–Clapeyron mixture** treatment.  
+  - **`hoa_pure_cc`** — **linear mixing** of **pure-component** CC HOA curves for the species in the blend (used alongside the mixture CC path as configured).
+
+- **Storage density:** `STORAGE_DENSITY = **cc**` (Virial and file-based SD are **off** here).  
+  **`STORAGE_DENSITY_DIMENSION = both`** — **2D** swing plots and **3D** surfaces are written.
+
+- **Swing scenarios (filenames):** under `Output/.../Storage_Density/` you get the usual stems **`sd_PS_Teq_cc_*`**, **`sd_TS_Peq_cc_*`**, **`sd_PTS_fixedPads_cc_*`**, and the **T_ads × T_des** map **`sd_Tads_Tdes_cc_3d_*`** (see the main **`README.md`** for what each stem means).
+
+- **Operating parameters:** `T_ADS`, `P_ADS`, `T_DES`, `P_DES_MIN` / `P_DES_MAX`, and `P_ADS_TT` / `P_DES_TT` for the T_ads–T_des storage-density map follow the lines in `config.in`.
+
+## Typical outputs (see bundled `Output/`)
+
+For a run folder such as **`Bhathia_01_R407F_283-303-333-353`**:
+
+- **`Basic_data/`** — mixture and **per-component** isotherm-style plots, **mole-fraction** plots vs pressure at selected temperatures, and saved tables where applicable.  
+- **`Heat_of_adsorption/`** — mixture HOA figure(s), e.g. **`mixture_cc_heat_*.png`**, plus **`saved/`** exports.  
+- **`Storage_Density/2D/R407F/`** and **`Storage_Density/3D/Bhathia_01_R407F/`** — CC storage-density curves and surfaces.  
+- **`Summary_*.txt`** — run summary next to the case folder.
+
+## How to reproduce
+
+The code expects **`config.in`** and **`Input/`** at the **repository root** (next to `run.py`).
+
+1. Copy **`config.in`** from this example into the repo root (save your current config if needed).  
+2. Copy **`Input/data_points.txt`** here to **`Input/data_points.txt`** at the repo root (or align paths in `config.in`).  
+3. From the repo root: `python run.py`
+
+The **`Output/`** tree included here is one completed run for reference.

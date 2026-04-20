@@ -93,6 +93,24 @@ def _storage_density_3d_filename_method_token(method):
     return m
 
 
+def _sd_filename_ps_teq(method, *, dim_3d=False):
+    """(i) Pressure swing, T_ads = T_des; fixed P_ads; stem Option A."""
+    t = _storage_density_3d_filename_method_token(method)
+    return f"sd_PS_Teq_{t}_3d" if dim_3d else f"sd_PS_Teq_{t}"
+
+
+def _sd_filename_ts_peq(method, *, dim_3d=False):
+    """(ii) Temperature swing, P_ads = P_des; stem Option A."""
+    t = _storage_density_3d_filename_method_token(method)
+    return f"sd_TS_Peq_{t}_3d" if dim_3d else f"sd_TS_Peq_{t}"
+
+
+def _sd_filename_pts_fixedpads(method, *, dim_3d=False):
+    """(iii) Combined P–T swing, fixed P_ads; stem Option A."""
+    t = _storage_density_3d_filename_method_token(method)
+    return f"sd_PTS_fixedPads_{t}_3d" if dim_3d else f"sd_PTS_fixedPads_{t}"
+
+
 def _iter_fw_mol_pairs(selected_frameworks, selected_molecules):
     for fw in _as_list(selected_frameworks):
         for mol in _as_list(selected_molecules):
@@ -597,15 +615,16 @@ def plot_storage_density(method, selected_frameworks, selected_molecules, select
             selected_frameworks, selected_molecules, folder_temps,
             dimension="2D", fw=None, mol=mol_current
         )
+        _stem_ps = _sd_filename_ps_teq(method)
         out_path = phelp._save_plot(
-            f'storage_density_{method}', 'plot_storage_density',
+            _stem_ps, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
             fw_label_override="all",
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
-            _save_sd_rows(out_path, export_rows, f"storage_density_{method}")
+            _save_sd_rows(out_path, export_rows, _stem_ps)
         plt.show()
         plt.close(fig)
 
@@ -755,15 +774,16 @@ def plot_storage_density_fixed_ads(method, selected_frameworks, selected_molecul
             selected_frameworks, selected_molecules, folder_temps,
             dimension="2D", fw=None, mol=mol_current
         )
+        _stem_pts = _sd_filename_pts_fixedpads(method)
         out_path = phelp._save_plot(
-            f'storage_density_fixedads_{method}', 'plot_storage_density',
+            _stem_pts, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
             fw_label_override="all",
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
-            _save_sd_rows(out_path, export_rows, f"storage_density_fixedads_{method}")
+            _save_sd_rows(out_path, export_rows, _stem_pts)
         plt.show()
         plt.close(fig)
 
@@ -913,15 +933,16 @@ def plot_storage_density_temperature_series(method, selected_frameworks, selecte
             selected_frameworks, selected_molecules, folder_temps,
             dimension="2D", fw=None, mol=mol_current
         )
+        _stem_ts = _sd_filename_ts_peq(method)
         out_path = phelp._save_plot(
-            f'storage_density_Tseries_{method}', 'plot_storage_density',
+            _stem_ts, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
             fw_label_override="all",
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
-            _save_sd_rows(out_path, export_rows, f"storage_density_Tseries_{method}")
+            _save_sd_rows(out_path, export_rows, _stem_ts)
         plt.show()
         plt.close(fig)
 
@@ -1003,7 +1024,7 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
                             swap_xy=False,
                             selected_frameworks=selected_frameworks,
                             selected_molecules=selected_molecules,
-                            save_name=f'storage_density_{_storage_density_3d_filename_method_token(method)}_3d',
+                            save_name=_sd_filename_ps_teq(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
                             combo_mol=mol)
@@ -1103,7 +1124,7 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
                             swap_xy=True,
                             selected_frameworks=selected_frameworks,
                             selected_molecules=selected_molecules,
-                            save_name=f'storage_density_fixedads_{_storage_density_3d_filename_method_token(method)}_3d',
+                            save_name=_sd_filename_pts_fixedpads(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
                             combo_mol=mol)
@@ -1216,7 +1237,7 @@ def plot_storage_density_temperature_series_3d(method, selected_frameworks, sele
                             swap_xy=False,
                             selected_frameworks=selected_frameworks,
                             selected_molecules=selected_molecules,
-                            save_name=f'storage_density_Tseries_{_storage_density_3d_filename_method_token(method)}_3d',
+                            save_name=_sd_filename_ts_peq(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
                             combo_mol=mol)
@@ -1363,8 +1384,9 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
             )
             fw_safe = str(fw).replace(" ", "_")
             mol_safe = str(mol).replace(" ", "_")
+            _stem_tadt = f"sd_Tads_Tdes_{_storage_density_3d_filename_method_token(method)}_3d"
             out_path = phelp._save_plot(
-                f'storage_density_{_storage_density_3d_filename_method_token(method)}_3d_Tads_Tdes', 'plot_storage_density',
+                _stem_tadt, 'plot_storage_density',
                 selected_frameworks, selected_molecules, folder_temps, fig=fig, out_dir=out_dir_3d,
                 fw_label_override=fw_safe,
                 mol_label_override=mol_safe,
@@ -1385,7 +1407,7 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
                         'P_des': float(P_des_const),
                         'SD': float(SD),
                     })
-                _save_sd_rows(out_path, export_rows, f"storage_density_{method}_3d_Tads_Tdes")
+                _save_sd_rows(out_path, export_rows, _stem_tadt)
             plt.show()
             plt.close(fig)
             any_plotted = True

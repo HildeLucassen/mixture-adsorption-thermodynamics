@@ -10,24 +10,13 @@ PRESSURE_UNIT           Pa
 PRESSURE_SCALE          log                     # or linear or both
 
 # ---- Input data ----
-DATA_FILE_FITTING       Input\data_parameters.txt   # isotherm fitting parameters (used when DATA_SOURCE=fitting)
 DATA_FILE_POINTS        Input\data_points.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
-DATA_FILE_HOA           Input\data_heat_of_adsorption.txt           # HOA: If input is a HOA file
 DATA_SOURCE             points                                     # 'fitting' or 'points'
 
 # ---- What to compute / plot ----
-HEAT_OF_ADSORPTION          cc                        # 'virial', 'cc', 'file', or 'both' (file = plot pure HOA from DATA_FILE_HOA)
 HEAT_OF_ADSORPTION_MIX      cc, hoa_pure_cc                    # 'cc', 'hoa_pure_cc', 'hoa_pure_virial', 'hoa_file', 'both'
-STORAGE_DENSITY             both                        # 'virial', 'cc', 'both', 'file', or 'no' ('file' = use Qst from DATA_FILE_HOA with same SD integrals)
+STORAGE_DENSITY             cc                        # 'virial', 'cc', 'both', 'file', or 'no' ('file' = use Qst from DATA_FILE_HOA with same SD integrals)
 STORAGE_DENSITY_DIMENSION   both                        # '3D' or 'both'
-
-# ---- Virial polynomial degrees ----
-SUGGESTION_VIRIAL       yes                             # yes = auto-search and apply best (deg_a, deg_b) per combo
-VIRIAL_DEGREES          (4, 3)                          # Ignored when SUGGESTION_VIRIAL = yes
-# Optional: one line per (structure, molecule); overrides VIRIAL_DEGREES for that pair when SUGGESTION_VIRIAL = no
-# VIRIAL_DEGREES_COMBO  Bhatia_01  R125  4  3
-# VIRIAL_DEGREES_COMBO  Bhatia_02  R125  3  2
-
 
 # ---- Storage density parameters ----
 P_DES_MIN               1e03                 # Pa, minimum desorption pressure
@@ -45,6 +34,3 @@ N_LOADINGS              50          # Amount of points used for heat of adsorpti
 SHOW_POINTS             no
 SHOW_PLOTS              no
 OUT_DIR                 yes
-
-# Legend label for DATA_FILE_HOA curve only (CC and Virial are fixed). Default: Data
-HOA_LEGEND_FILE         Data

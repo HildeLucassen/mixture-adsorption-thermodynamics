@@ -1,0 +1,40 @@
+=== Settings Summary ===
+Isotherm type: pure
+Frameworks (structures): [Bhathia_01]
+Molecules (selected): [R125]
+Temperatures (selected): [283, 303, 333, 353]
+Fit types: [Sips]
+Data source: fitting
+Show points: False
+Show plots: False
+Pressure range (isotherm): P_MIN=100.0 Pa, P_MAX=3000000.0 Pa
+Pressure range (storage-density desorption): P_DES_MIN=1000.0 Pa, P_DES_MAX=100000.0 Pa
+Fixed adsorption pressure: P_ads=100000.0 Pa
+
+Design choices:
+  Molecule colors (selected): {'R125': '#8DA0CB'}
+  Molecule markers (selected): {'R125': 'o'}
+  Fit-type line styles (selected): {'Sips': '-'}
+  HoA method line styles (active): {'clausius_clapeyron': '-', 'virial': '--', 'hoa_file': ':'}
+Effective plot styles (this run — each line is the value actually used):
+    Bhathia_01: '-'
+  Structure colours (when used as structure colour):
+    Bhathia_01: '#1f77b4'
+  Molecule colours & markers:
+    R125: colour='#8DA0CB'; marker='o'
+  Framework markers (material / RASPA scatter via marker_mapping):
+    Bhathia_01: 'o'
+  Fit-type line styles:
+    Sips: '-'
+  Molecule line styles (where set):
+    R125: '--'
+  HoA method line styles (active flags):
+    clausius_clapeyron: '-'
+    virial: '--'
+    hoa_file: ':'
+  Temperature–combo colours (first framework & first adsorbate in selection):
+    (Bhathia_01, R125) @ 283K: '#E41A1C'
+    (Bhathia_01, R125) @ 303K: '#377EB8'
+    (Bhathia_01, R125) @ 333K: '#4DAF4A'
+    (Bhathia_01, R125) @ 353K: '#FF7F00'
+=== End Settings ===

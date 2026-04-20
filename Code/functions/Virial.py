@@ -904,7 +904,8 @@ def plot_Qst(
 
     When ``method_linestyles`` is set (e.g. from Main), uses HoA colours and
     :func:`PlotHelpers.build_hoa_proxy_legend`; otherwise uses the classic
-    legend label with intersection point count.
+    legend label with intersection point count. Only the Qst curve is drawn
+    (no scatter of fitted input loadings).
     """
     if isinstance(framework, (list, tuple, set, np.ndarray)):
         fw_list_iter = list(framework)
@@ -1050,26 +1051,6 @@ def plot_Qst(
                     global_max_loading = max(global_max_loading, np.max(n_grid))
                     global_min_qst = min(global_min_qst, np.min(Q_plot[mask_valid]))
                     global_max_qst = max(global_max_qst, np.max(Q_plot[mask_valid]))
-
-                marker = phelp.get_marker_for_material(fw)
-                n_fit = np.array([float(p['loading']) for p in pts_for_fit], dtype=float)
-                in_range = (n_fit >= n_min_val) & (n_fit <= n_max_val)
-                if in_range.any():
-                    if method_linestyles is not None:
-                        sc_color = phelp.get_color_for_molecule(mol) or color
-                    elif standard_colors:
-                        sc_color = standard_colors.get('virial', color)
-                    else:
-                        sc_color = color
-                    ax.scatter(
-                        n_fit[in_range],
-                        np.interp(n_fit[in_range], n_grid, Q_plot),
-                        color=sc_color,
-                        s=phelp.AXIS_S_SIZE,
-                        alpha=phelp.ALPHA,
-                        marker=marker,
-                        zorder=6,
-                    )
 
                 if save_data:
                     for n_val, q_val in zip(n_grid, Q_plot):
