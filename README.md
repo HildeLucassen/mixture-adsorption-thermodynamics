@@ -1,8 +1,25 @@
 # Mixture adsorption thermodynamics
 
-Python workflow for **mixed-gas adsorption**: isotherm-based analysis, **heat of adsorption** (virial expansion and Clausius–Clapeyron routes, optional HOA input files), and **storage density** (including mixture formulations and 3D views). Intended as a configurable pipeline driven by tabular input data.
+Python workflow for **mixed-gas adsorption**: adsorption isotherm (Toth, Langmuir-Freundlich, Sips), **heat of adsorption** (Virial and Clausius–Clapeyron equation, optional HOA input files), and **storage density** (Clausius–Clapeyron equation for mixture, and linear mixing rule) with 2D and 3D views. 
+
+The pipeline for the code, as described in the figure below, is as followed:
+- Configuration
+  _config.in file_: This file defines all settings required to generate the intended output.
+    > ADSORBENT / ADSORBATE — names of the adsorbent–adsorbate system, matching the identifiers used in the data input.
+    > TEMPERATURE — temperatures at which adsorption isotherm data are provided.
+    > FIT_TYPE / NUM_ISOTHERM_SITE — selected isotherm model (Toth, Langmuir–Freundlich, Sips) and the number of adsorption sites.
+    > P_MIN / P_MAX / PRESSURE_UNIT — pressure boundaries and the corresponding pressure unit.
+    > PRESSURE_SCALE — scaling of the pressure axis in the output.
+    
+    > DATA_FILE_FITTING / POINTS / HOA — file locations for the input data (raw points, number of equilibrium points, or heat of adsorption data).
+    > DATA_SOURCE — specifies whether the input is points (raw equilibrium data) or fitting (model parameters for the isotherm equations) of pure components. 
+
+    > HEAT_OF_ADSORPTION
+
+      
 
 ![Workflow](Workflow.png)
+
 
 ## Requirements
 
