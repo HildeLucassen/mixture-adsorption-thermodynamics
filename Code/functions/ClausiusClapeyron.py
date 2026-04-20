@@ -972,30 +972,6 @@ def plot_clausius_clapeyron(selected_frameworks, selected_molecules, temperature
                                     color=cc_color, zorder=6,
                                 )
 
-                        # Print slopes and diagnostics for the computed points
-                        if slopes_arr is not None:
-                            try:
-                                loads = np.array(loading, dtype=float)
-                                slopes = np.array(slopes_arr, dtype=float)
-                                r2s = np.array(r2_arr, dtype=float) if r2_arr is not None else None
-                                vcs = np.array(valid_counts, dtype=int) if valid_counts is not None else None
-                                if fit_type is not None and num_params is not None:
-                                    fit_label = f"{fit_type} ({num_params//3}-site)"
-                                else:
-                                    fit_label = "direct interpolation"
-                                if fit_label != "direct interpolation":
-                                    print(
-                                        f"[plot_clausius_clapeyron] {fw},{mol} ({fit_label}) - "
-                                        "computed slopes (showing accepted points):"
-                                    )
-                                for idx in range(len(loads)):
-                                    _ = slopes[idx]
-                                    _ = Qst[idx] if Qst is not None else np.nan
-                                    _ = int(vcs[idx]) if vcs is not None else -1
-                                    _ = r2s[idx] if r2s is not None else np.nan
-                            except Exception:
-                                pass
-
                         if show_RASPA and RASPA_data is not None:
                             pts = phelp.filter_raspa_data(
                                 RASPA_data, frameworks=[fw], molecules=[mol],
@@ -1081,7 +1057,7 @@ def compute_mixture_isosteric_heat_cc(mixture_data, components, temperatures, fr
     components keep their own pressure ranges.
 
     **Mixture total:** ``data_by_temp[T]['all']`` (q_tot vs P) is filled from the saved
-       ``mixture_isotherm_log_*.txt`` when that file exists and contains mixture-total rows
+       ``mixture_isotherm_log.txt`` when that file exists and contains mixture-total rows
        (``molecule`` = mixture name, or legacy ``__MIXTURE_TOTAL__``) for every temperature (see
        ``IsothermFittingPlot.plot_mixture_isotherms`` with ``save_data``). Otherwise it falls back to the
        same sum-at-each-pressure convention as the ``mixture_isotherm_total_*`` figure.
@@ -1092,7 +1068,7 @@ def compute_mixture_isosteric_heat_cc(mixture_data, components, temperatures, fr
        ``q(T_cold,P) >= q(T_warm,P)`` at identical ``P`` because species grids do not align, which would
        otherwise truncate ``'all'`` to a tiny pressure window and break the mixture-total CC curve.
 
-    Total ``q_tot(P)`` rows are read from ``Output/<run>/Basic_Data/saved/mixture_isotherm_log_*.txt``
+    Total ``q_tot(P)`` rows are read from ``Output/<run>/Basic_Data/saved/mixture_isotherm_log.txt``
     when present (same file written by ``plot_mixture_isotherms`` with ``save_data``).
 
     Partial-molar CC still interpolates ``q_tot`` from these ``'all'`` curves; if totals are shorter than a
@@ -1146,7 +1122,7 @@ def compute_mixture_isosteric_heat_cc(mixture_data, components, temperatures, fr
         _, u = np.unique(Pv, return_index=True)
         return Pv[u], qv[u]
 
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = init.get_pipeline_run_root()
 
     def _resolve_mixture_total_log_path():
         return phelp.mixture_isotherm_saved_log_path(
@@ -1641,8 +1617,7 @@ def _save_mix_hoa_rows_to_run_folder(rows, fw, mixture_name, selected_temperatur
     try:
         from pathlib import Path as _Path
 
-        # Use repo root as base (go up two levels from code/functions/)
-        base_dir = base_dir or _Path(__file__).resolve().parents[2]
+        base_dir = base_dir or init.get_pipeline_run_root()
         plots_root = base_dir / 'Output'
 
         fw_part = _safe_join_mix([fw])
@@ -1653,7 +1628,7 @@ def _save_mix_hoa_rows_to_run_folder(rows, fw, mixture_name, selected_temperatur
         saved_dir = plots_root / run_folder_name / 'Heat_of_Adsorption' / 'saved'
         saved_dir.mkdir(parents=True, exist_ok=True)
 
-        data_path = saved_dir / f"{prefix}_{fw_part}__{mix_part}__{temp_part}.txt"
+        data_path = saved_dir / f"{prefix}.txt"
         with data_path.open('w', encoding='utf-8') as f:
             f.write("framework\tmolecule\ttemperature_K\tloading_mol_per_kg\tQst_kJmol\n")
             for r in rows:

@@ -896,6 +896,7 @@ def plot_Qst(
     degrees_per_combo=None,
     method_linestyles=None,
     save_data=False,
+    show_fit_points=None,
 ):
     """Plot Virial Qst(n) over the intersection loading range (outlier mask + ln(P) fit).
 
@@ -904,9 +905,19 @@ def plot_Qst(
 
     When ``method_linestyles`` is set (e.g. from Main), uses HoA colours and
     :func:`PlotHelpers.build_hoa_proxy_legend`; otherwise uses the classic
-    legend label with intersection point count. Only the Qst curve is drawn
-    (no scatter of fitted input loadings).
+    legend label with intersection point count.
+
+    When ``show_fit_points`` is True (default: ``Input.config['show_points']``,
+    i.e. SHOW_POINTS in config.in), overlay RASPA loadings used in the fit that
+    lie in the intersection ``[n_min, n_max]``—model Qst at each loading, same
+    colour as the curve (Clausius–Clapeyron–style), not per-temperature colours.
     """
+    if show_fit_points is None:
+        try:
+            import Input as _inp  # type: ignore
+            show_fit_points = bool(_inp.config.get('show_points', True))
+        except Exception:
+            show_fit_points = True
     if isinstance(framework, (list, tuple, set, np.ndarray)):
         fw_list_iter = list(framework)
     elif framework is None and save_fw_list is not None:
@@ -1051,6 +1062,36 @@ def plot_Qst(
                     global_max_loading = max(global_max_loading, np.max(n_grid))
                     global_min_qst = min(global_min_qst, np.min(Q_plot[mask_valid]))
                     global_max_qst = max(global_max_qst, np.max(Q_plot[mask_valid]))
+
+                if show_fit_points:
+                    _tol = 1e-9
+                    _nm, _nx = float(n_min_val), float(n_max_val)
+                    n_ov, q_ov = [], []
+                    for p in pts_for_fit:
+                        n = float(p['loading'])
+                        if n < _nm - _tol or n > _nx + _tol:
+                            continue
+                        qv = -float(R) * float(_eval_poly(coeffs_a, np.asarray([n], dtype=float))) / 1000.0
+                        if np.isfinite(qv):
+                            n_ov.append(n)
+                            q_ov.append(qv)
+                    if n_ov:
+                        n_ov = np.asarray(n_ov, dtype=float)
+                        q_ov = np.asarray(q_ov, dtype=float)
+                        ax.scatter(
+                            n_ov,
+                            q_ov,
+                            marker=phelp.get_marker_for_material(fw),
+                            s=phelp.AXIS_S_SIZE,
+                            alpha=phelp.ALPHA,
+                            color=color,
+                            edgecolors='none',
+                            zorder=5,
+                            label="_nolegend_",
+                        )
+                        global_max_loading = max(global_max_loading, float(np.max(n_ov)))
+                        global_min_qst = min(global_min_qst, float(np.min(q_ov)))
+                        global_max_qst = max(global_max_qst, float(np.max(q_ov)))
 
                 if save_data:
                     for n_val, q_val in zip(n_grid, Q_plot):

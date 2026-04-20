@@ -16,16 +16,16 @@ DATA_FILE_HOA           Input\data_heat_of_adsorption.txt           # HOA: If in
 DATA_SOURCE             fitting                                     # 'fitting' or 'points'
 
 # ---- What to compute / plot ----
-HEAT_OF_ADSORPTION          cc                        # 'virial', 'cc', 'file', or 'both' (file = plot pure HOA from DATA_FILE_HOA)
+HEAT_OF_ADSORPTION          virial                        # 'virial', 'cc', 'file', or 'both' (file = plot pure HOA from DATA_FILE_HOA)
 HEAT_OF_ADSORPTION_MIX      cc, hoa_pure_cc                    # 'cc', 'hoa_pure_cc', 'hoa_pure_virial', 'hoa_file', 'both'
 STORAGE_DENSITY             both                        # 'virial', 'cc', 'both', 'file', or 'no' ('file' = use Qst from DATA_FILE_HOA with same SD integrals)
 STORAGE_DENSITY_DIMENSION   both                        # '3D' or 'both'
 
 # ---- Virial polynomial degrees ----
-SUGGESTION_VIRIAL       yes                             # yes = auto-search and apply best (deg_a, deg_b) per combo
-VIRIAL_DEGREES          (4, 3)                          # Ignored when SUGGESTION_VIRIAL = yes
-# Optional: one line per (structure, molecule); overrides VIRIAL_DEGREES for that pair when SUGGESTION_VIRIAL = no
-# VIRIAL_DEGREES_COMBO  Bhatia_01  R125  4  3
+SUGGESTION_VIRIAL       no                             # yes = auto-search (VIRIAL_DEGREES / COMBO optional)
+VIRIAL_DEGREES          (4, 3)
+# Optional: one line per (framework, molecule, deg_a, deg_b); if any line parses, COMBO is used and VIRIAL_DEGREES is ignored
+ VIRIAL_DEGREES_COMBO  Bhathia_01  R125  5  2
 # VIRIAL_DEGREES_COMBO  Bhatia_02  R125  3  2
 
 
@@ -33,7 +33,7 @@ VIRIAL_DEGREES          (4, 3)                          # Ignored when SUGGESTIO
 P_DES_MIN               1e03                 # Pa, minimum desorption pressure
 P_DES_MAX               1e05               # Pa, maximum desorption pressure
 T_ADS                   283                  # K,  fixed adsorption temperature
-P_ADS                   2e06                 # Pa, fixed adsorption pressure
+P_ADS                   1e05                 # Pa, fixed adsorption pressure
 T_DES                   [283, 303, 333, 353]      # K,  desorption temperatures (default: seleted temperatures)
 P_ADS_TT                1e06                 # Pa, adsorption pressure  (T_ads–T_des 3D plot)
 P_DES_TT                1e03                 # Pa, desorption pressure  (T_ads–T_des 3D plot)
@@ -48,3 +48,4 @@ OUT_DIR                 yes
 
 # Legend label for DATA_FILE_HOA curve only (CC and Virial are fixed). Default: Data
 HOA_LEGEND_FILE         Data
+

@@ -1,0 +1,33 @@
+
+>>> Virial degree search (R² ≥ 0.99, deg_a ≥ deg_b):
+    Bhathia_01 / R125:  deg_a=5, deg_b=3  →  R²=0.9938  [applied]
+    Bhathia_01 / R134a:  deg_a=4, deg_b=2  →  R²=0.9983  [applied]
+    Bhathia_01 / R32:  deg_a=3, deg_b=1  →  R²=0.9975  [applied]
+    Global fallback (internal placeholder, VIRIAL_DEGREES omitted): deg_a=2, deg_b=2
+
+============================================================
+Virial Coefficients (framework=Bhathia_01, molecule=R125)
+============================================================
+Polynomial degrees used for this fit: deg_a=5, deg_b=3
+Fitted model: ln(P) = ln(q*) + (1/T)*Σ a_j (q*)^j + Σ b_j (q*)^j
+Optimization method: Non-linear least squares in log-pressure space
+
+Parameters a_i (deg_a=5, 6 coefficients):
+  a_0     -4.357966e+03 ±    3.679908e+01
+  a_1      8.227005e+02 ±    5.839133e+01
+  a_2     -3.255756e+02 ±    2.918323e+01
+  a_3      9.674088e+01 ±    8.210265e+00
+  a_4     -1.835604e+01 ±    1.491842e+00
+  a_5      1.237298e+00 ±    1.043583e-01
+
+Parameters b_j (deg_b=3, 4 coefficients):
+  b_0      2.179469e+01 ±    1.141798e-01
+  b_1     -5.754706e-01 ±    1.740239e-01
+  b_2     -1.805516e-02 ±    7.181672e-02
+  b_3      4.366768e-02 ±    8.464558e-03
+
+Goodness of Fit:
+  R²   = 1 - SSE/SS_tot  = 0.997244
+  (N = 195 data points, SSE = 1.175553e+11 Pa²)
+  Mean P_exp = 2.55e+05 Pa, Mean P_pred = 2.54e+05 Pa
+============================================================

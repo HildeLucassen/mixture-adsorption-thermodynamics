@@ -1,6 +1,22 @@
 import numpy as np
 import os
 import itertools
+from pathlib import Path
+
+
+def get_pipeline_run_root() -> Path:
+    """Root directory for ``config.in``, ``design.in``, and ``Output/``.
+
+    When ``run.py`` sets ``PIPELINE_REPO_ROOT`` (e.g. an example folder), use that.
+    Otherwise use the repository root (parent of the ``Code/`` package), i.e. two
+    levels above this file under ``Code/functions/``.
+    """
+    env = os.environ.get("PIPELINE_REPO_ROOT", "").strip()
+    if env:
+        p = Path(env).resolve()
+        if p.is_dir():
+            return p
+    return Path(__file__).resolve().parents[2]
 
 #Data loading
 def load_fitting_data(filepath, pressure_unit='kPa'):

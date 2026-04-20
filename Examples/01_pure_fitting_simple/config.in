@@ -1,0 +1,23 @@
+# ---- Data selection ----
+ADSORBENT               Bhathia_01              # space/comma-separated list; e.g. Bhatia_01, Bhatia_02
+ADSORBATE               R125                   # space/comma-separated list; e.g. R125, R134a
+TEMPERATURE             [283,303,333,353]           # K; leave blank to auto-select from fittings
+FIT_TYPE                Sips                    # space/comma-separated list; e.g. Sips, Toth, Langmuir-Freundlich
+NUM_ISOTHERM_SITES      2
+P_MIN                   100                     # Pa
+P_MAX                   3e06                    # Pa
+PRESSURE_UNIT           Pa
+PRESSURE_SCALE          log                     # or linear or both
+
+# ---- Input data ----
+DATA_FILE_FITTING       Input\data_parameters.txt   # isotherm fitting parameters (used when DATA_SOURCE=fitting)
+DATA_SOURCE             fitting                                     # 'fitting' or 'points'
+
+# ---- What to compute / plot ----
+HEAT_OF_ADSORPTION          cc                        # 'virial', 'cc', 'file', or 'both' (file = plot pure HOA from DATA_FILE_HOA)
+
+# ---- Output ----
+SHOW_PLOTS              no
+SHOW_POINTS             yes
+OUT_DIR                 yes
+

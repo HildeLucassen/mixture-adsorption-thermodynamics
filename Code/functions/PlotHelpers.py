@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from pathlib import Path
 from math import isclose
-import hashlib
 
 from pandas._libs.tslibs.offsets import LastWeekOfMonth
 import Initialize as init
@@ -1124,12 +1123,16 @@ def apply_unified_axes_layout(fig, ax):
 def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, selected_temperatures, fig=None, out_dir=None, temp_label_override=None, fw_label_override=None, mol_label_override=None, filename_suffix=None, *, tight_bbox=False, bbox_extra_artists=None):
     """Save a matplotlib plot. Default location is under ``Output/``.
 
+    Run folder name is still ``Output/<fw>_<mol>_<temp>/...``; the PNG file name is
+    ``<prefix>.png`` (or ``<prefix>_<filename_suffix>.png`` when *filename_suffix*
+    is set), without repeating framework / molecule / temperature in the file stem.
+
     If *tight_bbox* is True, save with ``bbox_inches='tight'`` (used for storage-density 3D PNGs).
     Pass *bbox_extra_artists* so mplot3d axis titles and ticks are not clipped by tight layout.
     """
 
-    # Use repo root as base (go up two levels from code/functions/)
-    base_dir = Path(__file__).resolve().parents[2]
+    # Output/config root: example folder when PIPELINE_REPO_ROOT is set, else Code_V5.
+    base_dir = init.get_pipeline_run_root()
 
     # helper to create safe joined strings
     def _safe_join(lst):
@@ -1170,12 +1173,6 @@ def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, sele
     if subfolder_name is None:
         subfolder_name = out_subdir if out_subdir else 'Other'
     
-    # Keep output path below common Windows path limits (OneDrive paths are deep).
-    _max_path_chars = 260
-    _run_key = f"{fw_part}|{mol_part}|{temp_part}"
-    _run_hash = hashlib.sha1(_run_key.encode("utf-8")).hexdigest()[:10]
-    _file_hash = hashlib.sha1(f"{prefix}|{_run_key}".encode("utf-8")).hexdigest()[:10]
-
     # If an explicit out_dir is provided, use it (create if needed). Otherwise
     # create a deterministic run folder under base_dir/Output using the parts.
     if out_dir is not None:
@@ -1187,27 +1184,19 @@ def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, sele
         # all plots from the same selection are stored together. If the folder
         # already exists reuse it; otherwise create it.
         run_folder_name = f"{fw_part}_{mol_part}_{temp_part}"
-        probe_name = f"{prefix}_{fw_part}__{mol_part}__{temp_part}.png"
-        probe_path = plots_root / run_folder_name / subfolder_name / probe_name
-        if len(str(probe_path)) > _max_path_chars:
-            run_folder_name = f"run_{_run_hash}"
         out_dir = plots_root / run_folder_name / subfolder_name
         out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Filename without timestamp to enable overwriting.
-    # If filename_suffix is set (e.g. single-structure name), use prefix_suffix.png only.
+    # Filename without timestamp to enable overwriting (no fw/mol/temp in stem; see run folder).
     if filename_suffix is not None:
         safe_suffix = str(filename_suffix).replace(" ", "_")
         filename = f"{prefix}_{safe_suffix}.png"
     else:
-        filename = f"{prefix}_{fw_part}__{mol_part}__{temp_part}.png"
+        filename = f"{prefix}.png"
     out_path = out_dir / filename
-    if len(str(out_path)) > _max_path_chars:
-        filename = f"{prefix}_{_file_hash}.png"
-        out_path = out_dir / filename
     try:
         if fig is None:
-            plt.savefig(out_path, dpi=300, format='png')
+            plt.savefig(str(out_path), dpi=300, format='png')
         else:
             kw = {'dpi': 300, 'format': 'png'}
             if tight_bbox:
@@ -1231,7 +1220,7 @@ def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, sele
                     pass
                 if bbox_extra_artists:
                     kw['bbox_extra_artists'] = bbox_extra_artists
-            fig.savefig(out_path, **kw)
+            fig.savefig(str(out_path), **kw)
     except Exception as e:
         print(f"Warning: failed to save {prefix} plot: {e}")
     return out_path
@@ -1393,7 +1382,7 @@ def filter_raspa_data(RASPA_data, frameworks=None, molecules=None, temperatures=
     return out
 
 
-# Reserved ``molecule`` in saved ``mixture_isotherm_log_*.txt`` for mixture-total (P, q_tot) rows.
+# Reserved ``molecule`` in saved ``mixture_isotherm_log.txt`` for mixture-total (P, q_tot) rows.
 MIXTURE_TOTAL_ISOTHERM_MOLECULE = "__MIXTURE_TOTAL__"
 
 
@@ -1409,10 +1398,7 @@ def mixture_isotherm_saved_log_path(repo_root, selected_frameworks, selected_mol
     mol_part = safe_join_plot_labels(selected_molecules)
     temp_part = safe_join_plot_labels(selected_temperatures)
     run_folder = f"{fw_part}_{mol_part}_{temp_part}"
-    return (
-        Path(repo_root) / "Output" / run_folder / "Basic_Data" / "saved" /
-        f"{prefix}_{fw_part}__{mol_part}__{temp_part}.txt"
-    )
+    return Path(repo_root) / "Output" / run_folder / "Basic_Data" / "saved" / f"{prefix}.txt"
 
 
 def mixture_total_pq_tuples(mixture_data, framework, temperature, components,
@@ -1452,7 +1438,7 @@ def mixture_total_pq_tuples(mixture_data, framework, temperature, components,
 
 def load_mixture_total_from_isotherm_log(path, framework, p_min=None, p_max=None, mixture_name=None):
     """
-    Read ``mixture_isotherm_log_*.txt`` and return ``{temperature: [(P, q_tot), ...]}``
+    Read ``mixture_isotherm_log.txt`` and return ``{temperature: [(P, q_tot), ...]}``
     for rows whose ``molecule`` is ``mixture_name`` (case-insensitive) or the legacy
     ``MIXTURE_TOTAL_ISOTHERM_MOLECULE`` tag, with matching framework.
 

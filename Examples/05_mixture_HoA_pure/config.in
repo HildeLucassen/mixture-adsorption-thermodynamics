@@ -1,0 +1,28 @@
+# ---- Data selection ----
+ADSORBENT               Bhathia_01   # space/comma-separated list; e.g. Bhatia_01, Bhatia_02
+ADSORBATE               R407F                # space/comma-separated list; e.g. R125, R134a
+TEMPERATURE             [283,303,333,353]               # K; leave blank to auto-select from fittings
+FIT_TYPE                Sips                    # space/comma-separated list; e.g. Sips, Toth, Langmuir-Freundlich
+NUM_ISOTHERM_SITES      2
+P_MIN                   100                     # Pa
+P_MAX                   3e06                    # Pa
+PRESSURE_UNIT           Pa
+PRESSURE_SCALE          log                     # or linear or both
+
+# ---- Input data ----
+DATA_FILE_FITTING       Input\data_parameters.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
+DATA_FILE_POINTS        Input\data_points.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
+DATA_SOURCE             fitting
+
+# ---- What to compute / plot ----
+HEAT_OF_ADSORPTION_MIX      both                    # 'cc', 'hoa_pure_cc', 'hoa_pure_virial', 'hoa_file', 'both'
+
+# ---- Virial polynomial degrees ----
+SUGGESTION_VIRIAL       no
+VIRIAL_DEGREES_COMBO  Bhatia_01  R125   4  3
+VIRIAL_DEGREES_COMBO  Bhatia_01  R32    4  3
+VIRIAL_DEGREES_COMBO  Bhatia_02  R134a  3  2
+
+# ---- Output ----
+SHOW_PLOTS              no
+OUT_DIR                 yes

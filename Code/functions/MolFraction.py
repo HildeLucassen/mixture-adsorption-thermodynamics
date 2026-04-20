@@ -6,6 +6,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 
 import PlotHelpers as phelp
+import Initialize as init
 
 
 def _safe_join(lst):
@@ -20,14 +21,13 @@ def _save_mol_fraction_rows_to_run_folder(rows, fw_part, mix_part, temp_part, pr
     if not rows:
         return
     try:
-        # Use repo root as base (go up two levels from code/functions/)
-        base_dir = Path(__file__).resolve().parents[2]
+        base_dir = init.get_pipeline_run_root()
         plots_root = base_dir / 'Output'
         run_folder_name = f"{fw_part}_{mix_part}_{temp_part}"
         saved_dir = plots_root / run_folder_name / 'Basic_Data' / 'saved'
         saved_dir.mkdir(parents=True, exist_ok=True)
 
-        data_path = saved_dir / f"{prefix}_{fw_part}__{mix_part}__{temp_part}.txt"
+        data_path = saved_dir / f"{prefix}.txt"
         with data_path.open('w', encoding='utf-8') as f:
             f.write("framework\tmolecule\ttemperature_K\tpressure_Pa\tmole_fraction\n")
             for r in rows:

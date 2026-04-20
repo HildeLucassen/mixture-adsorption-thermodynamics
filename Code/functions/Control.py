@@ -433,10 +433,12 @@ def plot_lnP_vs_loading_from_virial(RASPA_data=None, framework=None, molecule=No
     fw_list = selected_frameworks if selected_frameworks is not None else [framework]
     mol_list = selected_molecules if selected_molecules is not None else [molecule]
     temp_list = selected_temperatures if selected_temperatures is not None else (temperatures if temperatures is not None else [f'virial_deg_a{deg_a}_b{deg_b}'])
-    # Short filename ``prefix_<fw>__<mol>.png`` avoids Windows path-length hash fallback
-    # (``prefix_<10-char-hash>.png``) when temps make the default name very long.
+    # When saving into a per-combo folder (``.../virial_control/<fw>_<mol>/``), use only
+    # ``prefix.png`` like other HOA figures—suffix would repeat fw/mol and can push the
+    # full path past the Windows limit. When *out_dir* is None, keep a disambiguating suffix
+    # under the flat ``Heat_of_Adsorption`` folder.
     _save_name_suffix = None
-    if len(fw_list) == 1 and len(mol_list) == 1:
+    if out_dir is None and len(fw_list) == 1 and len(mol_list) == 1:
         _save_name_suffix = (
             f"{str(fw_list[0]).replace(' ', '_')}__{str(mol_list[0]).replace(' ', '_')}"
         )
@@ -444,7 +446,7 @@ def plot_lnP_vs_loading_from_virial(RASPA_data=None, framework=None, molecule=No
     save_out_dir = out_dir
     if save_out_dir is None:
         try:
-            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+            base_dir = str(init.get_pipeline_run_root())
             run_folder_name = f"{'-'.join([str(x).replace(' ', '_') for x in fw_list])}_{'-'.join([str(x).replace(' ', '_') for x in mol_list])}_{'-'.join([str(x).replace(' ', '_') for x in temp_list])}"
             save_out_dir = os.path.join(base_dir, "Output", run_folder_name, "Heat_of_Adsorption")
             os.makedirs(save_out_dir, exist_ok=True)

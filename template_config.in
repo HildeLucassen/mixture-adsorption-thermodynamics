@@ -1,0 +1,51 @@
+# ---- Data selection ----
+ADSORBENT               Bhathia_02  # space/comma-separated list; e.g. Bhatia_01, Bhatia_02
+ADSORBATE               R600                 # space/comma-separated list; e.g. R125, R134a
+TEMPERATURE             [283,303,333,353]               # K; leave blank to auto-select from fittings
+FIT_TYPE                Sips                    # space/comma-separated list; e.g. Sips, Toth, Langmuir-Freundlich
+NUM_ISOTHERM_SITES      2
+P_MIN                   1                     # Pa
+P_MAX                   3e06                    # Pa
+PRESSURE_UNIT           Pa
+PRESSURE_SCALE          log                     # or linear or both
+
+# ---- Input data ----
+DATA_FILE_FITTING       Input\data_fitting_parameters_results.txt   # isotherm fitting parameters (used when DATA_SOURCE=fitting)
+DATA_FILE_POINTS        Input\data_RASPA_sim_results.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
+DATA_FILE_HOA           Input\data_heat_of_adsorption.txt           # HOA: If input is a HOA file
+DATA_SOURCE             fitting                                     # 'fitting' or 'points'
+
+# ---- What to compute / plot ----
+HEAT_OF_ADSORPTION          cc                         # 'virial', 'cc', 'file', or 'both' (file = plot pure HOA from DATA_FILE_HOA)
+HEAT_OF_ADSORPTION_MIX      cc                        # 'cc', 'hoa_pure_cc', 'hoa_pure_virial', 'hoa_file', 'both'
+STORAGE_DENSITY             cc                        # 'virial', 'cc', 'both', 'file', or 'no' — omit or 'no' to skip all SD plots
+# Dimension: 2d, 3d, both, all (= 2D+3D). per_component / components: mixture plots only, under …/Storage_Density_components/<mixture>/ (stems sd_PTS_components_*). Combine with both etc. for full 2D/3D + components. Default if STORAGE_DENSITY is on: both.
+STORAGE_DENSITY_DIMENSION   2d                        # e.g. 2d | 3d | both | per_component | both, per_component
+
+# ---- Virial polynomial degrees ----
+SUGGESTION_VIRIAL       yes                             # yes = auto-search and apply best (deg_a, deg_b) per combo
+VIRIAL_DEGREES          (4, 3)                          # Ignored when SUGGESTION_VIRIAL = yes
+# Optional: one line per (structure, molecule); overrides VIRIAL_DEGREES for that pair when SUGGESTION_VIRIAL = no
+# VIRIAL_DEGREES_COMBO  Bhatia_01  R125  4  3
+# VIRIAL_DEGREES_COMBO  Bhatia_02  R125  3  2
+
+
+# ---- Storage density parameters ----
+P_DES_MIN               1e03                 # Pa, minimum desorption pressure
+P_DES_MAX               1e05               # Pa, maximum desorption pressure
+T_ADS                   283                  # K,  fixed adsorption temperature
+P_ADS                   5e04                 # Pa, fixed adsorption pressure
+T_DES                   [283, 303, 333, 353]      # K,  desorption temperatures (default: seleted temperatures)
+P_ADS_TT                1e06                 # Pa, adsorption pressure  (T_ads–T_des 3D plot)
+P_DES_TT                1e03                 # Pa, desorption pressure  (T_ads–T_des 3D plot)
+
+# ---- Calculation ----
+N_LOADINGS              50
+
+# ---- Output ----
+SHOW_POINTS             no
+SHOW_PLOTS              no
+OUT_DIR                 yes
+
+# Legend label for DATA_FILE_HOA curve only (CC and Virial are fixed). Default: Data
+HOA_LEGEND_FILE         Data

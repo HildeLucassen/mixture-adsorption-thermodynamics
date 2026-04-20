@@ -1,0 +1,28 @@
+Virial degree search: disabled (SUGGESTION_VIRIAL = no in config.in).
+Using VIRIAL_DEGREES_COMBO (global fallback deg_a=4, deg_b=3; VIRIAL_DEGREES is not used when COMBO lines are present).
+
+============================================================
+Virial Coefficients (framework=Bhathia_01, molecule=R32)
+============================================================
+Polynomial degrees used for this fit: deg_a=4, deg_b=3
+Fitted model: ln(P) = ln(q*) + (1/T)*Σ a_j (q*)^j + Σ b_j (q*)^j
+Optimization method: Non-linear least squares in log-pressure space
+
+Parameters a_i (deg_a=4, 5 coefficients):
+  a_0     -2.828965e+03 ±    6.182438e+01
+  a_1      1.876075e+02 ±    6.526488e+01
+  a_2     -3.501244e+01 ±    1.887594e+01
+  a_3     -1.021300e+00 ±    1.728688e+00
+  a_4      3.169992e-01 ±    5.178052e-02
+
+Parameters b_j (deg_b=3, 4 coefficients):
+  b_0      2.045761e+01 ±    1.960469e-01
+  b_1     -7.432761e-01 ±    2.045415e-01
+  b_2      2.188725e-01 ±    5.721886e-02
+  b_3     -1.473326e-02 ±    4.525819e-03
+
+Goodness of Fit:
+  R²   = 1 - SSE/SS_tot  = 0.998387
+  (N = 191 data points, SSE = 1.566441e+11 Pa²)
+  Mean P_exp = 6.95e+05 Pa, Mean P_pred = 6.94e+05 Pa
+============================================================

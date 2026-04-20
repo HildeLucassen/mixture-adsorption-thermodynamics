@@ -16,7 +16,7 @@ The pipeline for the code, as described in the figure below
 Important keys in `config.in`
 ### **Data & system definition**
 - **`ADSORBENT` / `ADSORBATE`** — names of the adsorbent–adsorbate system, matching the identifiers in the data input. Automatically detects pure vs. mixture adsorbates.  
-- **`TEMPERATURE`** — temperatures at which adsorption isotherm data are provided.  
+- **`TEMPERATURE`** — temperatures at which adsorption isotherm data are provided. Heat of Adsorption needs minimum of three temperatures. 
 - **`DATA_SOURCE`** — `fitting` (isotherm parameters) or `points` (raw equilibrium data).  
 - **`DATA_FILE_FITTING`**, **`DATA_FILE_POINTS`**, **`DATA_FILE_HOA`** — paths to input tables (relative to repo root).
 
@@ -78,7 +78,7 @@ With output options turned on in `config.in`, results are written under **`Outpu
 
 ## Requirements
 
-- **Python** 3.10 or newer  
+- **Python** 3.9 or newer (3.9 through 3.13 and later are expected to work; use a matching `py -3.x` on Windows).  
 - **Packages:** `numpy`, `scipy`, `matplotlib`, `pandas` (see note below)
 
 Install dependencies (from the repository root):
@@ -91,13 +91,24 @@ pip install numpy scipy matplotlib pandas
 
 ## How to run
 
-From the repository root (so paths in `config.in` resolve correctly):
+### Python interpreter (Windows)
+
+If you use the [Windows Python launcher](https://docs.python.org/3/using/windows.html#python-launcher-for-windows), pin the version explicitly, for example:
 
 ```bash
-python run.py
+py -3.13 run.py
 ```
 
-`run.py` executes `Code/Main.py` with the working directory set to the project root. Plots use Matplotlib’s **Agg** backend (non-interactive, suitable for servers and batch runs).
+That selects Python 3.13 for this run. The same pattern works for **`py -3.12`**, **`py -3.11`**, … down to **`py -3.9`**, as long as that runtime is installed and dependencies are available. On Linux or macOS, use `python3.13 run.py`, `python3.9 run.py`, etc. (or whatever `python3` points to) instead of `py -3.13`.
+
+### Where to run from
+
+| Layout | What to do |
+|--------|------------|
+| **Repository root** (`Code_V5/`, next to the top-level `config.in`, `run.py`, `Input/`, `Code/`) | Open a shell **in that folder** (the workspace / clone root), then run e.g. `py -3.13 run.py` or `py -3.9 run.py`. `config.in` paths such as `Input\data_parameters.txt` are resolved relative to this directory. |
+| **An example folder** (`Examples/<example_name>/`, with its own `config.in` and `Input/`) | Either **change directory** into that example and run e.g. `py -3.13 run.py`, or stay at the repo root and run `py -3.13 Examples/<example_name>/run.py` (same idea with `py -3.9`, …). Each example’s `run.py` sets the process working directory to that example folder and sets `PIPELINE_REPO_ROOT` so `config.in` and `Output/` stay with the example. |
+
+`run.py` starts `Code/Main.py` with the correct working directory for the chosen layout. Plots use Matplotlib’s **Agg** backend (non-interactive, suitable for servers and batch runs).
 
 
 ## Project layout

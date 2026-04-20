@@ -20,15 +20,15 @@ def _save_isotherm_rows_to_run_folder(rows, fw_part, mol_part, temp_part, prefix
     if not rows:
         return
     try:
-        # Use repo root as base (go up two levels from code/functions/)
-        base_dir = base_dir or Path(__file__).resolve().parents[2]
+        base_dir = base_dir or init.get_pipeline_run_root()
         plots_root = base_dir / 'Output'
 
         run_folder_name = f"{fw_part}_{mol_part}_{temp_part}"
         saved_dir = plots_root / run_folder_name / 'Basic_Data' / 'saved'
         saved_dir.mkdir(parents=True, exist_ok=True)
 
-        data_path = saved_dir / f"{prefix}_{fw_part}__{mol_part}__{temp_part}.txt"
+        # Same idea as ``_save_plot`` PNGs: run folder already encodes fw/mol/temps.
+        data_path = saved_dir / f"{prefix}.txt"
         with data_path.open('w', encoding='utf-8') as f:
             f.write(
                 "framework\tmolecule\ttemperature_K\tpressure_Pa\tloading_mol_per_kg\n"

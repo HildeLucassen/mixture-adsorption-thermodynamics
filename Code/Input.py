@@ -58,6 +58,24 @@ def _listify(x):
     return x if isinstance(x, list) else ([x] if x is not None else [])
 
 
+def _config_yes_no(value, default=True):
+    """Normalize yes/no style config values to bool (e.g. SHOW_PLOTS, OUT_DIR, SHOW_POINTS)."""
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, list):
+        return _config_yes_no(value[0], default) if value else default
+    if isinstance(value, (int, float)):
+        return int(value) != 0
+    s = str(value).strip().lower()
+    if s in ('yes', 'true', '1', 'y'):
+        return True
+    if s in ('no', 'false', '0', 'n'):
+        return False
+    return default
+
+
 def _parse_virial_degrees_combo(raw):
     """Parse VIRIAL_DEGREES_COMBO into {(framework, molecule): (deg_a, deg_b)}.
 
@@ -87,7 +105,68 @@ def _parse_virial_degrees_combo(raw):
     return out
 
 
-_repo_root = Path(__file__).resolve().parents[1]
+def _as_virial_deg_pair(v):
+    """Normalize VIRIAL_DEGREES to (int, int), or None if missing."""
+    if v is None:
+        return None
+    t = tuple(v)
+    if len(t) != 2:
+        raise ValueError(f"VIRIAL_DEGREES must be a pair (deg_a, deg_b), got {v!r}")
+    return (int(t[0]), int(t[1]))
+
+
+def _has_explicit_virial_degrees_in_config(read_cfg, combo_map):
+    """True if the user supplied VIRIAL_DEGREES_COMBO lines and/or a valid VIRIAL_DEGREES pair."""
+    if combo_map:
+        return True
+    try:
+        return _as_virial_deg_pair(read_cfg.get('VIRIAL_DEGREES')) is not None
+    except (ValueError, TypeError):
+        return False
+
+
+def _resolve_virial_degrees_for_config(suggestion_yes, read_cfg, selection_fw, selection_mol, combo_map):
+    """Return global (deg_a, deg_b) stored as config['virial_degrees'] (may be None).
+
+    When ``SUGGESTION_VIRIAL`` is omitted from ``config.in``, it is inferred: if any
+    ``VIRIAL_DEGREES_COMBO`` line parses or ``VIRIAL_DEGREES`` is a valid pair, behaviour
+    matches ``SUGGESTION_VIRIAL no``; otherwise it matches ``yes`` (auto-search).
+
+    SUGGESTION_VIRIAL=no: use VIRIAL_DEGREES unless at least one VIRIAL_DEGREES_COMBO
+    line parses; then COMBO sets the global fallback (first ADSORBENT/ADSORBATE match,
+    else first combo line). No implicit (4, 3) — one of the two must be set.
+
+    SUGGESTION_VIRIAL=yes: VIRIAL_DEGREES / COMBO are optional; return optional explicit
+    VIRIAL_DEGREES or None (Main uses an internal numeric fallback only when needed).
+    """
+    if suggestion_yes:
+        return _as_virial_deg_pair(read_cfg.get('VIRIAL_DEGREES'))
+    if combo_map:
+        fw0 = selection_fw[0] if selection_fw else None
+        mol0 = selection_mol[0] if selection_mol else None
+        if fw0 is not None and mol0 is not None and (fw0, mol0) in combo_map:
+            return combo_map[(fw0, mol0)]
+        return next(iter(combo_map.values()))
+    out = _as_virial_deg_pair(read_cfg.get('VIRIAL_DEGREES'))
+    if out is None:
+        raise ValueError(
+            "config.in: when SUGGESTION_VIRIAL=no, set VIRIAL_DEGREES or at least one "
+            "valid VIRIAL_DEGREES_COMBO line (framework molecule deg_a deg_b)."
+        )
+    return out
+
+
+def _runtime_repo_root() -> Path:
+    """Same semantics as ``Initialize.get_pipeline_run_root`` (cannot import that here)."""
+    env = os.environ.get("PIPELINE_REPO_ROOT", "").strip()
+    if env:
+        p = Path(env).resolve()
+        if p.is_dir():
+            return p
+    return Path(__file__).resolve().parents[1]
+
+
+_repo_root = _runtime_repo_root()
 _cfg_raw = _parse_config_in(str(_repo_root / 'config.in'))
 # VIRIAL_DEGREES_COMBO must stay full-line strings (not token-split by _parse_val).
 read_input_file = {}
@@ -158,7 +237,7 @@ plot_flags = {
     'Mixture_CC':              _mix_hoa in ('cc', 'both'),
     'Mixture_HOA_Pure_CC':     _mix_hoa in ('hoa_pure_cc',    'both'),
     'Mixture_HOA_Pure_Virial': _mix_hoa in ('hoa_pure_virial', 'both'),
-    'Mixture_HOA_Pure_File':   _mix_hoa in ('data_file', 'both'),
+    'Mixture_HOA_Pure_File':   _mix_hoa in ('hoa_file', 'data_file', 'both'),
 }
 
 # ---------------------------------------------------------------------------
@@ -177,25 +256,63 @@ _isotherm_raw = read_input_file.get('ISOTHERM_TYPE')
 _isotherm_st = '' if _isotherm_raw is None else str(_isotherm_raw).strip().lower()
 _isotherm_type_cfg = _isotherm_st if _isotherm_st in ('pure', 'mixture') else 'auto'
 
+_virial_fitting_degrees = _parse_virial_degrees_combo(read_input_file.get('VIRIAL_DEGREES_COMBO'))
+# Missing SUGGESTION_VIRIAL: use explicit COMBO / VIRIAL_DEGREES when given (→ suggestion off),
+# otherwise default to auto-search (same as ``SUGGESTION_VIRIAL yes``).
+if 'SUGGESTION_VIRIAL' in read_input_file:
+    _suggestion_virial = _config_yes_no(read_input_file.get('SUGGESTION_VIRIAL'), default=False)
+else:
+    _suggestion_virial = not _has_explicit_virial_degrees_in_config(read_input_file, _virial_fitting_degrees)
+_virial_degrees_resolved = _resolve_virial_degrees_for_config(
+    _suggestion_virial,
+    read_input_file,
+    selection['fw'],
+    selection['mol'],
+    _virial_fitting_degrees,
+)
+
+# ---------------------------------------------------------------------------
+# Storage-density defaults when keys are omitted (P_MIN / P_MAX = isotherm window)
+# ---------------------------------------------------------------------------
+_p_min_iso = read_input_file.get('P_MIN')
+_p_max_iso = read_input_file.get('P_MAX')
+_t_des_for_config = read_input_file.get('T_DES', selection['temp'])
+_t_des_floats: list[float] = []
+for _t in _listify(_t_des_for_config):
+    try:
+        _t_des_floats.append(float(_t))
+    except (TypeError, ValueError):
+        continue
+_t_ads_raw = read_input_file.get('T_ADS')
+if _t_ads_raw is not None:
+    _t_ads_resolved = float(_t_ads_raw)
+elif _t_des_floats:
+    _t_ads_resolved = min(_t_des_floats)
+else:
+    raise ValueError(
+        "config.in: set T_ADS, or set TEMPERATURE and/or T_DES with at least one temperature "
+        "so T_ADS can default to the lowest desorption temperature."
+    )
+
 config = {
     # Pressure range
     'P_MIN':     float(read_input_file.get('P_MIN')),
     'P_MAX':     float(read_input_file.get('P_MAX')),
-    'P_MIN_SD':  float(read_input_file.get('P_DES_MIN')),
-    'P_des_max': float(read_input_file.get('P_DES_MAX')),
+    'P_MIN_SD':  float(read_input_file.get('P_DES_MIN', _p_min_iso)),
+    'P_des_max': float(read_input_file.get('P_DES_MAX', _p_max_iso)),
     # Fixed pressures for T_ads–T_des storage-density 3D plot
-    'P_ads_TT':  float(read_input_file.get('P_ADS_TT')),
-    'P_des_TT':  float(read_input_file.get('P_DES_TT')),
+    'P_ads_TT':  float(read_input_file.get('P_ADS_TT', _p_max_iso)),
+    'P_des_TT':  float(read_input_file.get('P_DES_TT', _p_min_iso)),
 
     # Storage density
-    'T_ads':     float(read_input_file.get('T_ADS')),
-    'P_ads':     float(read_input_file.get('P_ADS')),
-    'T_des':     read_input_file.get('T_DES', selection['temp']),
+    'T_ads':     float(_t_ads_resolved),
+    'P_ads':     float(read_input_file.get('P_ADS', _p_max_iso)),
+    'T_des':     _t_des_for_config,
 
     # Fitting
-    'suggestion_virial': str(read_input_file['SUGGESTION_VIRIAL']).strip().lower() in ('yes', 'true'),
-    'virial_degrees': tuple(read_input_file.get('VIRIAL_DEGREES')),
-    'virial_fitting_degrees': _parse_virial_degrees_combo(read_input_file.get('VIRIAL_DEGREES_COMBO')),
+    'suggestion_virial': _suggestion_virial,
+    'virial_degrees': _virial_degrees_resolved,
+    'virial_fitting_degrees': _virial_fitting_degrees,
     'n_loadings':    int(read_input_file.get('N_LOADINGS', 50)),
 
     # Data
@@ -206,12 +323,12 @@ config = {
     # 'auto' when ISOTHERM_TYPE omitted: Main infers from RASPA + ADSORBATE (see Main.py).
     'isotherm_type':     _isotherm_type_cfg,
 
-    # Output
-    'out_dir':     bool(read_input_file.get('OUT_DIR', False)),
+    # Output (omit SHOW_POINTS / OUT_DIR → off, same as ``no``)
+    'out_dir':     _config_yes_no(read_input_file.get('OUT_DIR'), False),
     # Pressure scale for isotherm plots: 'log', 'linear', or 'both'
     'pressure_scale': str(read_input_file.get('PRESSURE_SCALE', 'both')).strip().lower(),
-    'show_points': bool(read_input_file.get('SHOW_POINTS', True)),
-    'show_plots':  bool(read_input_file.get('SHOW_PLOTS', False)),
+    'show_points': _config_yes_no(read_input_file.get('SHOW_POINTS'), False),
+    'show_plots':  _config_yes_no(read_input_file.get('SHOW_PLOTS'), False),
 
     # HoA file-curve legend label only (DATA_FILE_HOA); CC and Virial are fixed in code
     'hoa_legend_file': str(read_input_file.get('HOA_LEGEND_FILE') or 'Data').strip(),

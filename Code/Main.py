@@ -29,7 +29,18 @@ CC_MIN_TEMPS        = 3      # minimum number of temperatures required for a CC 
 
 
 visualisation_dir = Path(__file__).resolve().parent
-repo_root = visualisation_dir.parent
+_env_root = os.environ.get("PIPELINE_REPO_ROOT", "").strip()
+if _env_root:
+    repo_root = Path(_env_root).resolve()
+else:
+    # Allow ``python Main.py`` from an example directory (same folder as config.in)
+    # without going through example ``run.py`` — match run.py behaviour via cwd.
+    _cwd_cfg = Path.cwd().resolve() / "config.in"
+    if _cwd_cfg.is_file():
+        repo_root = Path.cwd().resolve()
+        os.environ["PIPELINE_REPO_ROOT"] = str(repo_root)
+    else:
+        repo_root = visualisation_dir.parent
 functions_dir = visualisation_dir / 'functions'
 
 # Prevent the built-in 'code' module from shadowing the local one
@@ -221,10 +232,6 @@ if (
         _fits_from_disk, _mol_chk, selection.get('fw'), selection.get('temp')
     ):
         _mixture_use_points_fallback = True
-        print(
-            f"DATA_SOURCE=fitting: no isotherm parameters for adsorbate {_mol_chk!r} in the fitting file; "
-            "using RASPA points for mixture/calculation data."
-        )
         if _points_file and not data_points:
             try:
                 data_points = init.load_RASPA_data(str(_points_file), pure_only=True)
@@ -657,7 +664,13 @@ if (
 # Virial polynomial degrees — resolved before the isotherm-type split so they
 # are available in both mixture and pure branches.
 # ---------------------------------------------------------------------------
-_virial_deg_a, _virial_deg_b = config.get('virial_degrees')  # global fallback
+_virial_deg_cfg = config.get('virial_degrees')
+if _virial_deg_cfg is None:
+    # SUGGESTION_VIRIAL=yes with VIRIAL_DEGREES omitted: internal fallback for
+    # dict.get(..., fallback) only; per-(fw, mol) degrees come from search / COMBO.
+    _virial_deg_a, _virial_deg_b = 2, 2
+else:
+    _virial_deg_a, _virial_deg_b = _virial_deg_cfg
 # Per-(fw, mol) degrees: start from VIRIAL_DEGREES_COMBO in config.in; optional search overwrites below.
 _virial_degrees_dict = dict(config.get('virial_fitting_degrees') or {})
 
@@ -721,20 +734,40 @@ if config.get('suggestion_virial', False) and _need_virial_degrees:
                     _virial_degrees_dict[(fw, mol)] = (sug['deg_a'], sug['deg_b'])
             except Exception as e:
                 _deg_lines.append(f"    {fw} / {mol}:  search failed — {e}")
-    _deg_lines.append(f"    Global fallback: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}")
+    _gf = (
+        "    Global fallback (internal placeholder, VIRIAL_DEGREES omitted): "
+        f"deg_a={_virial_deg_a}, deg_b={_virial_deg_b}"
+        if _virial_deg_cfg is None
+        else f"    Global fallback: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}"
+    )
+    _deg_lines.append(_gf)
     _deg_lines.append("")
     virial.DEGREE_SEARCH_REPORT_TEXT = "\n".join(_deg_lines)
 elif config.get('suggestion_virial', False):
-    virial.DEGREE_SEARCH_REPORT_TEXT = (
-        "Virial degree search: skipped (HEAT_OF_ADSORPTION is not virial/both; no storage-density virial; "
-        "no mixture HOA–pure–virial).\n"
-        f"Using global degrees from VIRIAL_DEGREES / VIRIAL_DEGREES_COMBO: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}.\n"
-    )
+    if _virial_deg_cfg is None:
+        virial.DEGREE_SEARCH_REPORT_TEXT = (
+            "Virial degree search: skipped (HEAT_OF_ADSORPTION is not virial/both; no storage-density virial; "
+            "no mixture HOA–pure–virial).\n"
+            "SUGGESTION_VIRIAL=yes: VIRIAL_DEGREES and VIRIAL_DEGREES_COMBO are not required for this run.\n"
+        )
+    else:
+        virial.DEGREE_SEARCH_REPORT_TEXT = (
+            "Virial degree search: skipped (HEAT_OF_ADSORPTION is not virial/both; no storage-density virial; "
+            "no mixture HOA–pure–virial).\n"
+            f"Optional VIRIAL_DEGREES from config.in: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}.\n"
+        )
 else:
-    virial.DEGREE_SEARCH_REPORT_TEXT = (
-        "Virial degree search: disabled (SUGGESTION_VIRIAL = no in config.in).\n"
-        f"Using global degrees from VIRIAL_DEGREES: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}.\n"
-    )
+    if config.get('virial_fitting_degrees'):
+        virial.DEGREE_SEARCH_REPORT_TEXT = (
+            "Virial degree search: disabled (SUGGESTION_VIRIAL = no in config.in).\n"
+            f"Using VIRIAL_DEGREES_COMBO (global fallback deg_a={_virial_deg_a}, deg_b={_virial_deg_b}; "
+            "VIRIAL_DEGREES is not used when COMBO lines are present).\n"
+        )
+    else:
+        virial.DEGREE_SEARCH_REPORT_TEXT = (
+            "Virial degree search: disabled (SUGGESTION_VIRIAL = no in config.in).\n"
+            f"Using VIRIAL_DEGREES: deg_a={_virial_deg_a}, deg_b={_virial_deg_b}.\n"
+        )
 
 # Isotherm plots: pure mode uses fitting curves/scatter; mixture mode plots components
 if config['isotherm_type'] == 'mixture':
@@ -922,13 +955,25 @@ if config['isotherm_type'] != 'mixture':
             if curves:
                 globals()['qst_cache_file'] = {k: v for k, v in curves.items()}
 
-_sd_method = Input.plot_flags.get('Storage_Density_Method', False)
-_run_cc_sd, _run_virial_sd = (_sd_method in ('cc', 'both'),
-                              _sd_method in ('virial', 'both'))
+_sd_method = str(Input.plot_flags.get('Storage_Density_Method', '') or '').strip().lower()
+_run_cc_sd = _sd_method in ('cc', 'both')
+_run_virial_sd = _sd_method in ('virial', 'both')
+_run_data_file_sd = _sd_method in ('data_file', 'both')
 
-_sd_dim = Input.plot_flags.get('Storage_Density_Dim', '2d')
-_run_sd_2d, _run_sd_3d = (_sd_dim in ('2d', 'both'),
-                          _sd_dim in ('3d', 'both'))
+_has_sd_request = bool(_sd_method) and _sd_method not in ('none', 'no', '')
+
+_sd_dim_str = str(Input.plot_flags.get('Storage_Density_Dim', '') or '').strip().lower()
+_run_sd_2d = False
+_run_sd_3d = False
+_run_sd_mix_components = False
+if _has_sd_request:
+    # ``both`` / ``all`` = 2D + 3D only. ``per_component`` (or ``components``) = mixture
+    # Per-component mixture SD only when those tokens are present (not implied by ``all``).
+    _dim_src = _sd_dim_str or 'both'
+    _dim_tokens = {t for t in _dim_src.replace(',', ' ').split() if t}
+    _run_sd_2d = bool(_dim_tokens & {'2d', 'both', 'all'})
+    _run_sd_3d = bool(_dim_tokens & {'3d', 'both', 'all'})
+    _run_sd_mix_components = bool(_dim_tokens & {'per_component', 'components'})
 
 _sd_methods_to_run = []
 if _run_cc_sd:
@@ -1036,7 +1081,7 @@ if config['isotherm_type'] != 'mixture':
 
     # Optional pure-component storage density using HoA-from-file (method='data_file').
     # This reuses the CC isotherm grid but injects Qst from an external file via qst_cache_file.
-    if Input.plot_flags.get('HOA_From_File') and 'cc' in _sd_per_method:
+    if Input.plot_flags.get('HOA_From_File') and 'cc' in _sd_per_method and _has_sd_request:
         qst_cache_file = globals().get('qst_cache_file')
         if qst_cache_file:
             _hoa_raspa, _hoa_x, _hoa_extra = _sd_per_method['cc']
@@ -1131,26 +1176,33 @@ def _run_mixture_storage_density_suite(mix_name, mix_fits, qst_cache, method_lab
             config['P_ads_TT'], config['P_des_TT'], x, colors, [],
             save_data=config.get('out_dir', False), **_sd_kw)
 
-if config['isotherm_type'] == 'mixture' and mixture_data and Input.plot_flags['Mixture_CC']:
+if (
+    config['isotherm_type'] == 'mixture'
+    and mixture_data
+    and Input.plot_flags['Mixture_CC']
+    and _has_sd_request
+    and _run_cc_sd
+):
     _mix_name   = selection['mol'][0]
     _all_sd_T   = sorted({float(config['T_ads'])} |
                          {float(t) for t in config['T_des']} |
                          {float(t) for t in selection['temp']})
-    # Synthetic 'interp' fittings from RASPA total-loading data
-    _mix_fits   = sd.make_mixture_fittings(
-        mixture_data, selection['fw'], _mix_name, _all_sd_T)
-    # Pre-computed mixture Qst (total) to inject via qst_cache
-    _mix_qst    = sd.make_mixture_qst_cache(
-        mixture_data, selection['fw'], _mix_name, selection['temp'],
-        p_min=config['P_MIN'], p_max=config['P_MAX'],
-        n_loadings=config['n_loadings'],
-        min_temps=CC_MIN_TEMPS,
-        smoothing_sigma=CC_SMOOTHING_SIGMA,
-    )
 
-    _run_mixture_storage_density_suite(_mix_name, _mix_fits, _mix_qst, method_label='cc')
+    if _run_sd_2d or _run_sd_3d:
+        # Synthetic 'interp' fittings from RASPA total-loading data
+        _mix_fits   = sd.make_mixture_fittings(
+            mixture_data, selection['fw'], _mix_name, _all_sd_T)
+        # Pre-computed mixture Qst (total) to inject via qst_cache
+        _mix_qst    = sd.make_mixture_qst_cache(
+            mixture_data, selection['fw'], _mix_name, selection['temp'],
+            p_min=config['P_MIN'], p_max=config['P_MAX'],
+            n_loadings=config['n_loadings'],
+            min_temps=CC_MIN_TEMPS,
+            smoothing_sigma=CC_SMOOTHING_SIGMA,
+        )
+        _run_mixture_storage_density_suite(_mix_name, _mix_fits, _mix_qst, method_label='cc')
 
-    if _run_sd_2d and config.get('data_source') == 'fitting':
+    if _run_sd_mix_components and config.get('data_source') == 'fitting':
         sd.plot_storage_density_mix_components_cc(
             selected_frameworks=selection['fw'],
             mixture_name=_mix_name,
@@ -1173,59 +1225,67 @@ if config['isotherm_type'] == 'mixture' and mixture_data and Input.plot_flags['M
             scale=config.get('pressure_scale', 'both'),
         )
 
-if config['isotherm_type'] == 'mixture' and mixture_data and Input.plot_flags['Mixture_HOA_Pure_CC']:
+if (
+    config['isotherm_type'] == 'mixture'
+    and mixture_data
+    and Input.plot_flags['Mixture_HOA_Pure_CC']
+    and _has_sd_request
+    and _run_cc_sd
+):
     _mix_name_hoa   = selection['mol'][0]
     _all_sd_T_hoa   = sorted({float(config['T_ads'])} |
                              {float(t) for t in config['T_des']} |
                              {float(t) for t in selection['temp']})
-    # Synthetic 'interp' fittings from RASPA total-loading data (reuse same construction)
-    _mix_fits_hoa   = sd.make_mixture_fittings(
-        mixture_data, selection['fw'], _mix_name_hoa, _all_sd_T_hoa)
-    # Pre-computed mixture Qst from hoa_pure_cc (weighted pure CC) at T_ads
-    _mix_qst_hoa_cc = sd.make_mixture_qst_cache_hoa_pure_cc(
-        mixture_data=mixture_data,
-        frameworks=selection['fw'],
-        mixture_name=_mix_name_hoa,
-        pure_temperatures=selection['temp'],
-        mix_temperature=config['T_ads'],
-        fits_pure=_fits_from_disk,
-        RASPA_data_pure=raspa_pure_mixture_components or raspa_for_cc,
-        selected_fit_types=selection['fit_types'],
-        p_min=config['P_MIN'], p_max=config['P_MAX'],
-        n_loadings=config['n_loadings'],
-        min_temps=CC_MIN_TEMPS,
-        smoothing_sigma=CC_SMOOTHING_SIGMA,
-        use_direct_interpolation=False,
-    )
 
-    _run_mixture_storage_density_suite(_mix_name_hoa, _mix_fits_hoa, _mix_qst_hoa_cc, method_label='hoa_pure_cc')
+    if _run_sd_2d or _run_sd_3d:
+        # Synthetic 'interp' fittings from RASPA total-loading data (reuse same construction)
+        _mix_fits_hoa   = sd.make_mixture_fittings(
+            mixture_data, selection['fw'], _mix_name_hoa, _all_sd_T_hoa)
+        # Pre-computed mixture Qst from hoa_pure_cc (weighted pure CC) at T_ads
+        _mix_qst_hoa_cc = sd.make_mixture_qst_cache_hoa_pure_cc(
+            mixture_data=mixture_data,
+            frameworks=selection['fw'],
+            mixture_name=_mix_name_hoa,
+            pure_temperatures=selection['temp'],
+            mix_temperature=config['T_ads'],
+            fits_pure=_fits_from_disk,
+            RASPA_data_pure=raspa_pure_mixture_components or raspa_for_cc,
+            selected_fit_types=selection['fit_types'],
+            p_min=config['P_MIN'], p_max=config['P_MAX'],
+            n_loadings=config['n_loadings'],
+            min_temps=CC_MIN_TEMPS,
+            smoothing_sigma=CC_SMOOTHING_SIGMA,
+            use_direct_interpolation=False,
+        )
+        _run_mixture_storage_density_suite(_mix_name_hoa, _mix_fits_hoa, _mix_qst_hoa_cc, method_label='hoa_pure_cc')
 
 if config['isotherm_type'] == 'mixture' and mixture_data and Input.plot_flags['Mixture_HOA_Pure_Virial']:
     _mix_name_hoa_v   = selection['mol'][0]
     _all_sd_T_hoa_v   = sorted({float(config['T_ads'])} |
                                {float(t) for t in config['T_des']} |
                                {float(t) for t in selection['temp']})
-    _mix_fits_hoa_v   = sd.make_mixture_fittings(
-        mixture_data, selection['fw'], _mix_name_hoa_v, _all_sd_T_hoa_v)
-
     # Shared DataSelection grid for Virial HOA — same as CC (raspa_pure_mixture_components).
     _rpmc_virial_sd = raspa_pure_mixture_components or raspa_for_cc
 
-    _mix_qst_hoa_virial = sd.make_mixture_qst_cache_hoa_pure_virial(
-        mixture_data=mixture_data,
-        frameworks=selection['fw'],
-        mixture_name=_mix_name_hoa_v,
-        temperatures=selection['temp'],
-        RASPA_data_pure=_rpmc_virial_sd,
-        deg_a=_virial_deg_a, deg_b=_virial_deg_b,
-        degrees_per_combo=_virial_degrees_dict or {},
-        min_points=VIRIAL_MIN_POINTS,
-        n_loadings=config['n_loadings'],
-        p_min=config['P_MIN'], p_max=config['P_MAX'],
-        smoothing_sigma=CC_SMOOTHING_SIGMA,
-    )
+    if _has_sd_request and _run_virial_sd and (_run_sd_2d or _run_sd_3d):
+        _mix_fits_hoa_v   = sd.make_mixture_fittings(
+            mixture_data, selection['fw'], _mix_name_hoa_v, _all_sd_T_hoa_v)
 
-    _run_mixture_storage_density_suite(_mix_name_hoa_v, _mix_fits_hoa_v, _mix_qst_hoa_virial, method_label='hoa_pure_virial')
+        _mix_qst_hoa_virial = sd.make_mixture_qst_cache_hoa_pure_virial(
+            mixture_data=mixture_data,
+            frameworks=selection['fw'],
+            mixture_name=_mix_name_hoa_v,
+            temperatures=selection['temp'],
+            RASPA_data_pure=_rpmc_virial_sd,
+            deg_a=_virial_deg_a, deg_b=_virial_deg_b,
+            degrees_per_combo=_virial_degrees_dict or {},
+            min_points=VIRIAL_MIN_POINTS,
+            n_loadings=config['n_loadings'],
+            p_min=config['P_MIN'], p_max=config['P_MAX'],
+            smoothing_sigma=CC_SMOOTHING_SIGMA,
+        )
+
+        _run_mixture_storage_density_suite(_mix_name_hoa_v, _mix_fits_hoa_v, _mix_qst_hoa_virial, method_label='hoa_pure_virial')
 
     virial.plot_mixture_heat_hoa_pure_virial(
         mixture_data=mixture_data,
@@ -1278,8 +1338,14 @@ if config['isotherm_type'] == 'mixture' and mixture_data and Input.plot_flags.ge
         smoothing_sigma=CC_SMOOTHING_SIGMA,
     )
 
-    if _mix_qst_hoa_file:
+    if (
+        _mix_qst_hoa_file
+        and _has_sd_request
+        and _run_data_file_sd
+        and (_run_sd_2d or _run_sd_3d)
+    ):
         _run_mixture_storage_density_suite(_mix_name_hoa_file, _mix_fits_hoa_file, _mix_qst_hoa_file, method_label='data_file')
+    if _mix_qst_hoa_file:
         cc.plot_mixture_heat_hoa_pure_file(
             mixture_data=mixture_data,
             hoa_pure_curves=hoa_curves_pure,
@@ -1304,7 +1370,8 @@ if config['isotherm_type'] != 'mixture' and Input.plot_flags['Virial'] and Input
         deg_a=_virial_deg_a, deg_b=_virial_deg_b, virial_plot=virial_results,
         degrees_per_combo=_virial_degrees_dict or None,
         smooth=True, use_direct_interpolation=(config['data_source'] == 'points'),
-        smoothing_sigma=CC_SMOOTHING_SIGMA, method_linestyles=hoa_method_linestyles, show_markers=False,
+        smoothing_sigma=CC_SMOOTHING_SIGMA, method_linestyles=hoa_method_linestyles,
+        show_markers=False,
         qst_cache_file=qst_cache_file)
 
 # ln(P) vs loading + virial_coefficients.txt — only for Virial HOA (virial/both), not cc- or file-only runs.
@@ -1314,7 +1381,7 @@ if (config['isotherm_type'] != 'mixture'
     _fw_part = "-".join([str(x).replace(" ", "_") for x in selection['fw']]) if selection['fw'] else "all"
     _mol_part = "-".join([str(x).replace(" ", "_") for x in selection['mol']]) if selection['mol'] else "all"
     _temp_part = "-".join([str(x).replace(" ", "_") for x in selection['temp']]) if selection['temp'] else "all"
-    _virial_control_root = Path(__file__).resolve().parents[1] / "Output" / f"{_fw_part}_{_mol_part}_{_temp_part}" / "Heat_of_Adsorption" / "virial_control"
+    _virial_control_root = repo_root / "Output" / f"{_fw_part}_{_mol_part}_{_temp_part}" / "Heat_of_Adsorption" / "virial_control"
     _virial_control_root.mkdir(parents=True, exist_ok=True)
     for _fw in selection['fw']:
         for _mol in selection['mol']:

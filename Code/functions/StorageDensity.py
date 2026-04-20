@@ -21,6 +21,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 import PlotHelpers as phelp
+import Initialize as init
 import Virial as virial
 from ClausiusClapeyron import compute_isosteric_heat
 
@@ -111,6 +112,12 @@ def _sd_filename_pts_fixedpads(method, *, dim_3d=False):
     return f"sd_PTS_fixedPads_{t}_3d" if dim_3d else f"sd_PTS_fixedPads_{t}"
 
 
+def _sd_filename_pts_components(method, T_des_k):
+    """Per-component P–T swing SD (filename stem aligned with ``sd_PTS_fixedPads_*``)."""
+    t = _storage_density_3d_filename_method_token(method)
+    return f"sd_PTS_components_{t}_Tdes{int(float(T_des_k))}K"
+
+
 def _iter_fw_mol_pairs(selected_frameworks, selected_molecules):
     for fw in _as_list(selected_frameworks):
         for mol in _as_list(selected_molecules):
@@ -131,7 +138,7 @@ def _get_storage_density_out_dir(
     - 2D: <run>/Storage_Density/2D/<mol>
     - 3D: <run>/Storage_Density/3D/<fw>_<mol>
     """
-    base_dir = Path(__file__).resolve().parents[2]
+    base_dir = init.get_pipeline_run_root()
     run_folder = (
         f"{_safe_join_labels(selected_frameworks)}_"
         f"{_safe_join_labels(selected_molecules)}_"
@@ -502,21 +509,16 @@ def _render_surface(T_vals, P_vals, SD_vals, fig_title, xlabel, ylabel,
     if save_name:
         fw_one = combo_fw if combo_fw is not None else (_as_list(selected_frameworks)[0] if _as_list(selected_frameworks) else None)
         mol_one = combo_mol if combo_mol is not None else (_as_list(selected_molecules)[0] if _as_list(selected_molecules) else None)
-        fw_safe = str(fw_one).replace(" ", "_") if fw_one is not None else "all"
-        mol_safe = str(mol_one).replace(" ", "_") if mol_one is not None else "all"
         out_dir = _get_storage_density_out_dir(
             selected_frameworks, selected_molecules, folder_temps,
             dimension="3D",
             fw=fw_one,
             mol=mol_one,
         )
-        # Short filename_suffix avoids Windows path-length fallback to ``prefix_<hash>.png``,
-        # which shows up as an opaque "title" in many image viewers (run folder already encodes temps).
+        # ``out_dir`` is already ``.../Storage_Density/3D/<fw>_<mol>/`` — use ``prefix.png`` only
+        # (sidecar ``saved/<stem>_data.txt`` matches the PNG stem).
         phelp._save_plot(save_name, 'plot_storage_density',
                          selected_frameworks, selected_molecules, folder_temps, fig=fig, out_dir=out_dir,
-                         fw_label_override=fw_safe if fw_one is not None else None,
-                         mol_label_override=mol_safe if mol_one is not None else None,
-                         filename_suffix=f"{fw_safe}__{mol_safe}",
                          tight_bbox=True,
                          bbox_extra_artists=_sd3d_bbox_extra_artists(ax, cb))
     plt.show()
@@ -537,6 +539,12 @@ def _save_sd_rows(out_path, rows, method_label):
     try:
         from pathlib import Path
         base = Path(out_path)
+        try:
+            if not base.is_absolute():
+                base = base.resolve()
+        except (OSError, RuntimeError):
+            base = Path(out_path).expanduser()
+        base.parent.mkdir(parents=True, exist_ok=True)
         saved_dir = base.parent / "saved"
         saved_dir.mkdir(parents=True, exist_ok=True)
         data_path = saved_dir / (base.stem + '_data.txt')
@@ -1495,15 +1503,10 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
                 dimension="3D",
                 fw=fw, mol=mol,
             )
-            fw_safe = str(fw).replace(" ", "_")
-            mol_safe = str(mol).replace(" ", "_")
             _stem_tadt = f"sd_Tads_Tdes_{_storage_density_3d_filename_method_token(method)}_3d"
             out_path = phelp._save_plot(
                 _stem_tadt, 'plot_storage_density',
                 selected_frameworks, selected_molecules, folder_temps, fig=fig, out_dir=out_dir_3d,
-                fw_label_override=fw_safe,
-                mol_label_override=mol_safe,
-                filename_suffix=f"{fw_safe}__{mol_safe}",
                 tight_bbox=True,
                 bbox_extra_artists=_sd3d_bbox_extra_artists(ax, cb),
             )
@@ -2308,6 +2311,20 @@ def plot_storage_density_mix_components_cc(
         print("plot_storage_density_mix_components_cc: no mixture data, skipping.")
         return
 
+    # Only when config requests storage density and an explicit per-component dimension.
+    # (Avoids writing per-component SD unless STORAGE_DENSITY and per_component are set.)
+    try:
+        import Input as _inp
+        _sdm = str(_inp.plot_flags.get('Storage_Density_Method', '') or '').strip().lower()
+        if not _sdm or _sdm in ('none', 'no'):
+            return
+        _dim = str(_inp.plot_flags.get('Storage_Density_Dim', '') or '').strip().lower()
+        _tok = {t for t in (_dim or 'both').replace(',', ' ').split() if t}
+        if not (_tok & {'per_component', 'components'}):
+            return
+    except Exception:
+        return
+
     # Temperatures for CC (Qst vs loading) – typically the isotherm temperatures
     cc_temps = [float(t) for t in (qst_temperatures or [])]
 
@@ -2315,16 +2332,21 @@ def plot_storage_density_mix_components_cc(
     fit_temps = sorted({float(T_ads)} | {float(t) for t in T_des_list})
 
     fw_first = selected_frameworks[0] if selected_frameworks else None
-    # Put mixture-component SD plots in a dedicated per-mixture folder.
-    mix_out_dir = None
+    folder_temps = list(qst_temperatures) if qst_temperatures else fit_temps
+    # Dedicated folder so ``per_component``-only runs do not write under ``Storage_Density/2D/``.
     if out_dir is None:
-        base_dir = Path(__file__).resolve().parents[2]
-        run_folder = f"{_safe_join_labels(selected_frameworks)}_{_safe_join_labels([mixture_name])}_{_safe_join_labels(list(qst_temperatures) if qst_temperatures else fit_temps)}"
-        mix_out_dir = base_dir / "Output" / run_folder / "Storage_Density_components" / str(mixture_name).replace(" ", "_")
-        mix_out_dir.mkdir(parents=True, exist_ok=True)
+        base_dir = init.get_pipeline_run_root()
+        run_folder = (
+            f"{_safe_join_labels(selected_frameworks)}_"
+            f"{_safe_join_labels([mixture_name])}_"
+            f"{_safe_join_labels(folder_temps)}"
+        )
+        mix_out_dir = (
+            base_dir / "Output" / run_folder / "Storage_Density_components"
+            / str(mixture_name).replace(" ", "_")
+        )
     else:
         mix_out_dir = Path(out_dir)
-        mix_out_dir.mkdir(parents=True, exist_ok=True)
 
     # One plot per T_des, with all frameworks overlaid
     for T_des in T_des_list:
@@ -2518,17 +2540,18 @@ def plot_storage_density_mix_components_cc(
         phelp.apply_unified_axes_layout(fig, ax)
         _sd_2d_axis_label_weight(ax)
 
-        mix_safe = str(mixture_name).replace(" ", "_")
+        mix_out_dir.mkdir(parents=True, exist_ok=True)
+
+        _stem_comp = _sd_filename_pts_components('cc', T_des)
         out_path = phelp._save_plot(
-            f"storage_density_components_cc_Tdes{int(T_des)}K",
-            "plot_storage_density_components",
-            selected_frameworks, [mixture_name], list(qst_temperatures) if qst_temperatures else fit_temps,
+            _stem_comp,
+            'plot_storage_density_components',
+            selected_frameworks, [mixture_name], folder_temps,
             fig=fig, out_dir=str(mix_out_dir),
-            filename_suffix=mix_safe,
         )
 
         if save_data and out_path is not None:
-            _save_sd_rows(out_path, export_rows, "storage_density_components_cc")
+            _save_sd_rows(out_path, export_rows, _stem_comp)
 
         plt.show()
         plt.close(fig)
