@@ -1,2 +1,6 @@
 # Framework   Temperature (K)  Molecule   FittingType       FinalParameters
-ADSORBENT     XXX              ADSORBATE  ADSORPTION MODEL  XX  XX  XX  .....
+# ADSORBENT     XXX              ADSORBATE  ADSORPTION MODEL  XX  XX  XX  .....
+Bhathia_01 283 R125 Sips     3.61198  1.68981e-05  0.99452  2.98623  8.88596e-05  1.55576      
+Bhathia_01 303 R125 Sips     3.06618  4.26232e-05  1.42477  3.20422  8.2639e-06  0.904409      
+Bhathia_01 333 R125 Sips     0.557423  0.000123676  1.11399  5.5684  4.77619e-06  1.13988      
+Bhathia_01 353 R125 Sips     1.4103  2.59856e-05  1.17714  4.34039  2.43938e-06  0.964087      

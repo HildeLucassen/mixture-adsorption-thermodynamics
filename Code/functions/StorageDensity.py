@@ -215,6 +215,104 @@ def _finite_qst(loads, qst):
     return lf, qf, float(np.min(lf)), float(np.max(lf))
 
 
+def _max_P_for_loading_in_qst_window(ads_params, ads_ft, q_min, q_max, *, n_scan=400):
+    """Largest pressure P (Pa) with ``q_min <= q(P) <= q_max`` for the adsorption isotherm at *T_ads*.
+
+    ``q_min`` / ``q_max`` are the loadings where Qst is defined (from :func:`_finite_qst`).
+    Uses a log-spaced scan so ``interp`` tabulated fits and analytic isotherms are covered;
+    may return NaN if no pressure in the search interval satisfies the band.
+    """
+    if not (np.isfinite(q_min) and np.isfinite(q_max) and q_max > q_min):
+        return float('nan')
+    q_lo = float(q_min)
+    q_hi = float(q_max)
+
+    ft_norm = str(ads_ft).replace('fitting_', '').strip()
+    if ft_norm.lower() == 'interp' and ads_params is not None and len(ads_params) >= 2:
+        P_arr = np.asarray(ads_params[0], dtype=float)
+        P_arr = P_arr[np.isfinite(P_arr) & (P_arr > 0)]
+        if P_arr.size:
+            p_a, p_b = float(np.min(P_arr)), float(np.max(P_arr))
+        else:
+            p_a, p_b = 1e-9, 1e8
+    else:
+        p_a, p_b = 1e-9, 1e8
+
+    p_a = max(p_a, 1e-30)
+    p_b = max(p_b, p_a * 1.0001)
+    P_grid = np.logspace(np.log10(p_a), np.log10(p_b), int(n_scan))
+    try:
+        q_eval = phelp.evaluate_fit(P_grid, ads_params, ads_ft)
+    except Exception:
+        return float('nan')
+    q_eval = np.asarray(q_eval, dtype=float)
+    if q_eval.shape != P_grid.shape:
+        if q_eval.size == P_grid.size:
+            q_eval = q_eval.reshape(P_grid.shape)
+        else:
+            return float('nan')
+    valid = np.isfinite(q_eval) & (q_eval >= q_lo) & (q_eval <= q_hi)
+    if np.any(valid):
+        return float(np.max(P_grid[valid]))
+
+    for q_star in (q_hi, q_lo):
+        try:
+            P_star = float(phelp.inverse_fit(q_star, ads_params, ads_ft))
+        except Exception:
+            continue
+        if not (np.isfinite(P_star) and P_star > 0):
+            continue
+        try:
+            qc = float(phelp.evaluate_fit(P_star, ads_params, ads_ft))
+        except Exception:
+            continue
+        if np.isfinite(qc) and q_lo <= qc <= q_hi:
+            return P_star
+    return float('nan')
+
+
+def _format_p_ads_qst_window_hint(ads_params, ads_ft, q_min, q_max):
+    p_s = _max_P_for_loading_in_qst_window(ads_params, ads_ft, q_min, q_max)
+    if np.isfinite(p_s) and p_s > 0:
+        return (
+            f" Largest P_ads at this T_ads with loading inside the Qst window "
+            f"[{q_min:.4g}, {q_max:.4g}] mol/kg is about {p_s:.4g} Pa."
+        )
+    return ""
+
+
+# Same P_ads / T_ads / Qst-window issue is hit from many plot branches (2D/3D, each T_des, CC/virial).
+_SEEN_L_ADS_QST_PADS_WARNING_KEYS: set = set()
+
+
+def reset_l_ads_qst_p_ads_warning_cache() -> None:
+    """Clear :data:`_SEEN_L_ADS_QST_PADS_WARNING_KEYS` (optional; for tests or repeated in-process runs)."""
+    _SEEN_L_ADS_QST_PADS_WARNING_KEYS.clear()
+
+
+def _warn_l_ads_outside_qst_once(fw, mol, t_ads_iso, p_ads, q_min, q_max, l_ads, ads_params, ads_ft):
+    """Emit at most one console line per (fw, mol, T_ads isotherm, P_ads, Qst loading window)."""
+    key = (
+        str(fw),
+        str(mol),
+        int(round(float(t_ads_iso))),
+        round(float(p_ads), 12),
+        round(float(q_min), 8),
+        round(float(q_max), 8),
+    )
+    if key in _SEEN_L_ADS_QST_PADS_WARNING_KEYS:
+        return
+    _SEEN_L_ADS_QST_PADS_WARNING_KEYS.add(key)
+    _hint = _format_p_ads_qst_window_hint(ads_params, ads_ft, q_min, q_max)
+    L_s = f"{l_ads:.4f}" if np.isfinite(l_ads) else "nan"
+    t_i = int(round(float(t_ads_iso)))
+    print(
+        f"Warning: L_ads={L_s} outside Qst range [{q_min:.4f}, {q_max:.4f}] mol/kg "
+        f"for {fw}, {mol} at T_ads={t_i} K with P_ads={float(p_ads):g} Pa "
+        f"(storage-density segments that use this adsorption state are skipped).{_hint}"
+    )
+
+
 def _sd_2d_axis_label_weight(ax):
     """Match Basic_data isotherm axis titles (``fontweight='medium'``) after ``format_storage_plot``."""
     ax.xaxis.label.set_fontweight('medium')
@@ -539,6 +637,11 @@ def plot_storage_density(method, selected_frameworks, selected_molecules, select
                         loads, qst = None, None
                     lf, qf, q_min, q_max = _finite_qst(loads, qst)
                     if lf is None or not np.isfinite(L_ads) or L_ads < q_min or L_ads > q_max:
+                        if lf is not None and q_min is not None and q_max is not None:
+                            _warn_l_ads_outside_qst_once(
+                                fw_current, mol_current, ads_temp, P_ads,
+                                q_min, q_max, L_ads, params, ft_type,
+                            )
                         continue
                     p_des_list, thermo_list = [], []
                     for p_des in x_fit:
@@ -620,7 +723,7 @@ def plot_storage_density(method, selected_frameworks, selected_molecules, select
             _stem_ps, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
-            fw_label_override="all",
+            fw_label_override=None,
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
@@ -705,8 +808,10 @@ def plot_storage_density_fixed_ads(method, selected_frameworks, selected_molecul
                     print(f"Warning: No valid Qst for {fw_current}, {mol_current}, Tdes={int(float(t_des))}K — skipping")
                     continue
                 if not np.isfinite(L_ads) or L_ads < q_min or L_ads > q_max:
-                    print(f"Warning: L_ads={L_ads:.4f} outside Qst range [{q_min:.4f}, {q_max:.4f}] "
-                          f"for {fw_current}, {mol_current}, T_ads={int(T_ads)}K, T_des={int(float(t_des))}K — skipping")
+                    _warn_l_ads_outside_qst_once(
+                        fw_current, mol_current, T_ads, P_ads,
+                        q_min, q_max, L_ads, ads_params, ads_ft,
+                    )
                     continue
 
                 sd_list, valid_p = [], []
@@ -779,7 +884,7 @@ def plot_storage_density_fixed_ads(method, selected_frameworks, selected_molecul
             _stem_pts, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
-            fw_label_override="all",
+            fw_label_override=None,
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
@@ -938,7 +1043,7 @@ def plot_storage_density_temperature_series(method, selected_frameworks, selecte
             _stem_ts, 'plot_storage_density',
             selected_frameworks, selected_molecules, folder_temps,
             fig=fig, out_dir=out_dir_2d,
-            fw_label_override="all",
+            fw_label_override=None,
             mol_label_override=str(mol_current).replace(" ", "_"),
         )
         if save_data:
@@ -1002,6 +1107,10 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
 
                     lf, qf, q_min, q_max = _finite_qst(loads, qst)
                     if lf is None or not np.isfinite(L_ads) or L_ads < q_min or L_ads > q_max:
+                        if lf is not None and q_min is not None and q_max is not None:
+                            _warn_l_ads_outside_qst_once(
+                                fw, mol, ads_temp, P_ads, q_min, q_max, L_ads, params, ft_type,
+                            )
                         continue
 
                     for p_des in p_list:
@@ -1099,6 +1208,10 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
 
                 lf, qf, q_min, q_max = _finite_qst(loads, qst)
                 if lf is None or not np.isfinite(L_ads) or L_ads < q_min or L_ads > q_max:
+                    if lf is not None and q_min is not None and q_max is not None:
+                        _warn_l_ads_outside_qst_once(
+                            fw, mol, T_ads, P_ads, q_min, q_max, L_ads, ads_params, ads_ft,
+                        )
                     continue
 
                 for idx, q_des in enumerate(q_des_all):
