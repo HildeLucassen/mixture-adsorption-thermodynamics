@@ -29,5 +29,6 @@ molecule_color_mapping = {
 temperature_color_mapping = {
 }
 
-# Optional SD 3D overrides: storage_density_3d_colormap (default 'viridis'),
-# storage_density_3d_boundries (default None; spelling matches code). More keys: Input.py / PlotHelpers.
+# Optional SD 3D overrides: 
+# storage_density_3d_colormap = (default 'viridis'),
+# storage_density_3d_boundries = (sd_min, sd_max) (default 0 to sd_max). 
