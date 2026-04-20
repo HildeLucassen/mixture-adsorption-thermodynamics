@@ -10,9 +10,9 @@ PRESSURE_UNIT           Pa
 PRESSURE_SCALE          log                     # or linear or both
 
 # ---- Input data ----
-DATA_FILE_FITTING       Input\data_parameters.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
-DATA_FILE_POINTS        Input\data_points.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
-DATA_FILE_HOA           Input\data_heat_of_adsorption.txt
+DATA_FILE_FITTING       Input/data_parameters.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
+DATA_FILE_POINTS        Input/data_points.txt            # RASPA simulation results    (used when DATA_SOURCE=points)
+DATA_FILE_HOA           Input/data_heat_of_adsorption.txt
 DATA_SOURCE             fitting
 
 # ---- What to compute / plot ----
