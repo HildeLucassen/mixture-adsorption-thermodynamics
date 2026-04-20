@@ -20,8 +20,7 @@ STORAGE_DENSITY_DIMENSION   both                        # '3D' or 'both'
 
 # ---- Virial polynomial degrees ----
 SUGGESTION_VIRIAL       no                             # yes = auto-search and apply best (deg_a, deg_b) per combo
-VIRIAL_DEGREES_COMBO  Bhatia_01  R125  5  4
-
+VIRIAL_DEGREES          (4, 3)
 
 # ---- Storage density parameters ----
 P_DES_MIN               1e03                 # Pa, minimum desorption pressure
