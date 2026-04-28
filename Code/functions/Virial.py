@@ -1014,12 +1014,19 @@ def plot_Qst(
                 Q_plot = -float(R) * _eval_poly(coeffs_a, n_grid) / 1000.0  # kJ/mol
 
                 if method_linestyles is not None:
-                    color = phelp.get_color_for_molecule(mol) or 'C0'
-                    # Match PlotHelpers.build_hoa_proxy_legend: single method → structure linestyles
-                    _hoa_ls_mode = phelp.choose_hoa_proxy_linestyle_mode(['virial'])
-                    ls = phelp.get_hoa_linestyle(
-                        fw, 'virial', _hoa_ls_mode, method_linestyles=method_linestyles
-                    )
+                    # Color/linestyle scheme matches plot_clausius_clapeyron:
+                    #   single adsorbate + multiple adsorbents → color encodes framework, solid line
+                    #   otherwise                              → color encodes molecule, linestyle encodes framework
+                    _color_by_fw = (len(mol_list_iter) == 1 and len(fw_list_iter) > 1)
+                    if _color_by_fw:
+                        color = phelp.get_color_for_structure(fw) or 'C0'
+                        ls = '-'
+                    else:
+                        color = phelp.get_color_for_molecule(mol) or 'C0'
+                        _hoa_ls_mode = phelp.choose_hoa_proxy_linestyle_mode(['virial'])
+                        ls = phelp.get_hoa_linestyle(
+                            fw, 'virial', _hoa_ls_mode, method_linestyles=method_linestyles
+                        )
                     ax.plot(
                         n_grid,
                         Q_plot,
@@ -1125,6 +1132,7 @@ def plot_Qst(
         ax.set_xlim(left=0, right=global_max_loading * 1.05)
     ax.grid(True, which='both', ls='--', alpha=phelp.ALPHA_GRID)
     if method_linestyles is not None:
+        _virial_color_by_fw = (len(mol_list_iter) == 1 and len(fw_list_iter) > 1)
         phelp.build_hoa_proxy_legend(
             ax,
             molecules_present=mol_list_iter,
@@ -1133,6 +1141,7 @@ def plot_Qst(
             method_linestyles=method_linestyles,
             fontsize=phelp.AXIS_LEGEND_SIZE,
             loc='best',
+            color_by_framework=_virial_color_by_fw,
         )
     else:
         ax.legend(fontsize=phelp.AXIS_LEGEND_SIZE, loc='best')

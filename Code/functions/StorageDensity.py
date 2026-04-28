@@ -363,7 +363,8 @@ def _sd3d_bbox_extra_artists(ax, cb):
     return artists
 
 
-def _sd3d_apply_axis_labels_and_colorbar(fig, ax, surf, xlabel, ylabel, zlabel, log_pressure_axis=None):
+def _sd3d_apply_axis_labels_and_colorbar(fig, ax, surf, xlabel, ylabel, zlabel,
+                                         log_pressure_axis=None, sd_ticks=None):
     """2D-matched label and tick sizes; colorbar in a separate ``cax`` so the 3D axes are not shrunk.
 
     *zlabel* is drawn only on the colorbar (left side of the strip, toward the 3D axes), not on the 3D z-axis.
@@ -435,7 +436,9 @@ def _sd3d_apply_axis_labels_and_colorbar(fig, ax, surf, xlabel, ylabel, zlabel, 
         length=phelp.AXIS_TICK_LENGTH_MAJOR,
         pad=phelp.AXIS_TICK_PAD,
     )
-    if cb_kw['ticks']:
+    if sd_ticks is not None:
+        cb.set_ticks(sd_ticks)
+    elif cb_kw['ticks']:
         cb.set_ticks(cb_kw['ticks'])
     elif cb_kw.get('nticks', 0):
         from matplotlib import ticker as mticker
@@ -448,7 +451,8 @@ def _sd3d_apply_axis_labels_and_colorbar(fig, ax, surf, xlabel, ylabel, zlabel, 
 def _render_surface(T_vals, P_vals, SD_vals, fig_title, xlabel, ylabel,
                     swap_xy=False, selected_frameworks=None, selected_molecules=None,
                     save_name=None, folder_temps=None,
-                    combo_fw=None, combo_mol=None):
+                    combo_fw=None, combo_mol=None,
+                    sd_vmin=None, sd_vmax=None, sd_ticks=None):
     """Build an interpolated T×P surface and render it as a 3-D plot.
 
     When *swap_xy* is True the surface axes are (log10 P, T, SD) instead of (T, log10 P, SD).
@@ -483,12 +487,29 @@ def _render_surface(T_vals, P_vals, SD_vals, fig_title, xlabel, ylabel,
                          np.ceil(np.nanmax(np.log10(P_u))) + 1)
 
     cmap = phelp.resolve_storage_density_3d_colormap()
-    vmin, vmax = phelp.resolve_storage_density_3d_boundries()
+    config_vmin, config_vmax = phelp.resolve_storage_density_3d_boundries()
+    # Priority: user-set config bounds > caller-supplied shared-run bounds
+    _vmin = config_vmin if config_vmin is not None else sd_vmin
+    _vmax = config_vmax if config_vmax is not None else sd_vmax
+    # If either bound is still missing, derive nice bounds from the data
+    if _vmin is None or _vmax is None:
+        raw_lo = float(np.nanmin(SD_grid)) if np.any(np.isfinite(SD_grid)) else None
+        raw_hi = float(np.nanmax(SD_grid)) if np.any(np.isfinite(SD_grid)) else None
+        if raw_lo is not None and raw_hi is not None:
+            _vmin_auto, _vmax_auto, _ = uniform_colorbar(raw_lo, raw_hi)
+            if _vmin is None:
+                _vmin = _vmin_auto
+            if _vmax is None:
+                _vmax = _vmax_auto
+    # Always compute nice ticks for whatever vmin/vmax we ended up with,
+    # unless the caller already supplied explicit ticks.
+    if sd_ticks is None and _vmin is not None and _vmax is not None:
+        _, _, sd_ticks = uniform_colorbar(_vmin, _vmax)
     surf_kw = dict(cmap=cmap, edgecolor='none', antialiased=True)
-    if vmin is not None:
-        surf_kw['vmin'] = vmin
-    if vmax is not None:
-        surf_kw['vmax'] = vmax
+    if _vmin is not None:
+        surf_kw['vmin'] = _vmin
+    if _vmax is not None:
+        surf_kw['vmax'] = _vmax
 
     fig = plt.figure(figsize=phelp.resolve_storage_density_3d_figsize())
     ax = fig.add_subplot(111, projection='3d')
@@ -504,7 +525,8 @@ def _render_surface(T_vals, P_vals, SD_vals, fig_title, xlabel, ylabel,
         log_axis = 'y'
 
     cb = _sd3d_apply_axis_labels_and_colorbar(
-        fig, ax, surf, xlabel, ylabel, SD3D_LABEL_SD, log_pressure_axis=log_axis)
+        fig, ax, surf, xlabel, ylabel, SD3D_LABEL_SD, log_pressure_axis=log_axis,
+        sd_ticks=sd_ticks)
 
     if save_name:
         fw_one = combo_fw if combo_fw is not None else (_as_list(selected_frameworks)[0] if _as_list(selected_frameworks) else None)
@@ -523,6 +545,38 @@ def _render_surface(T_vals, P_vals, SD_vals, fig_title, xlabel, ylabel,
                          bbox_extra_artists=_sd3d_bbox_extra_artists(ax, cb))
     plt.show()
     plt.close(fig)
+
+
+def uniform_colorbar(raw_vmin, raw_vmax):
+    """Return *(vmin_nice, vmax_nice, ticks)* with a round step (5, 10, 20, 25, 50, …).
+
+    Chooses the smallest step from the candidate list that still gives between 3
+    and 9 labelled ticks.  Returns ``(None, None, None)`` when the range is zero
+    or non-finite.
+    """
+    if not (np.isfinite(raw_vmin) and np.isfinite(raw_vmax)):
+        return None, None, None
+    span = raw_vmax - raw_vmin
+    if span <= 0:
+        return raw_vmin, raw_vmax, None
+    candidates = [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]
+    step = candidates[-1]
+    for s in candidates:
+        if 3 <= span / s <= 7:
+            step = s
+            break
+    vmin_nice = float(np.floor(raw_vmin / step) * step)
+    vmax_nice = float(np.ceil(raw_vmax / step) * step)
+    ticks = np.arange(vmin_nice, vmax_nice + step * 0.5, step)
+    return vmin_nice, vmax_nice, ticks
+
+
+def _nice_colorbar_step_from_values(values):
+    """Compute shared *(vmin_nice, vmax_nice, ticks)* from a flat list of raw SD values."""
+    finite = [v for v in values if np.isfinite(float(v))]
+    if not finite:
+        return None, None, None
+    return uniform_colorbar(min(finite), max(finite))
 
 
 # ---------------------------------------------------------------------------
@@ -1072,7 +1126,8 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
                             deg_a=2, deg_b=2, min_points=3, virial_p_min=None,
                             coeffs_a_override=None, coeffs_b_override=None,
                             degrees_per_combo=None, folder_temperatures=None,
-                            qst_cache=None):
+                            qst_cache=None,
+                            data_only=False, sd_vmin=None, sd_vmax=None, sd_ticks=None):
     """3-D surface: adsorption/desorption temperature × desorption pressure × storage density.
 
     *method* is ``'cc'`` or ``'virial'``.  Axes: X = temperature [K], Y = log10(P_des), Z = SD.
@@ -1085,6 +1140,7 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
     if len(p_list) == 0:
         p_list = x_fit
 
+    all_sd_collect: list[float] = []
     any_plotted = False
     for fw in selected_frameworks:
         for mol in selected_molecules:
@@ -1131,6 +1187,9 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
 
             if not T_vals:
                 continue
+            if data_only:
+                all_sd_collect.extend(SD_vals)
+                continue
             label = 'Clausius\u2013Clapeyron' if method == 'cc' else method.capitalize()
             title = (f"Storage Density from {label}\n"
                      r"$P_{{ads}}$ = {:.2g} Pa, $T_{{ads}}$ = $T_{{des}}$".format(P_ads))
@@ -1144,8 +1203,11 @@ def plot_storage_density_3d(method, selected_frameworks, selected_molecules, sel
                             save_name=_sd_filename_ps_teq(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
-                            combo_mol=mol)
+                            combo_mol=mol,
+                            sd_vmin=sd_vmin, sd_vmax=sd_vmax, sd_ticks=sd_ticks)
             any_plotted = True
+    if data_only:
+        return all_sd_collect
     if not any_plotted:
         print(f"Warning: No valid data for 3D storage density plot (method={method}).")
 
@@ -1159,7 +1221,8 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
                                       deg_a=2, deg_b=2, min_points=3, virial_p_min=None,
                                       coeffs_a_override=None, coeffs_b_override=None,
                                       degrees_per_combo=None, folder_temperatures=None,
-                                      qst_cache=None):
+                                      qst_cache=None,
+                                      data_only=False, sd_vmin=None, sd_vmax=None, sd_ticks=None):
     """3-D surface: desorption temperature × desorption pressure × storage density (fixed T_ads, P_ads).
 
     *method* is ``'cc'`` or ``'virial'``.  Axes: X = log10(P_des), Y = T_des [K], Z = SD.
@@ -1173,6 +1236,7 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
     if len(p_list) == 0:
         p_list = x_fit
 
+    all_sd_collect: list[float] = []
     any_plotted = False
     for fw in selected_frameworks:
         for mol in selected_molecules:
@@ -1235,6 +1299,9 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
                         SD_vals.append(val)
             if not T_vals:
                 continue
+            if data_only:
+                all_sd_collect.extend(SD_vals)
+                continue
             label = 'Clausius\u2013Clapeyron' if method == 'cc' else method.capitalize()
             title = (f"Storage Density from {label} (fixed $T_{{ads}}$, $P_{{ads}}$)\n"
                      f"$T_{{ads}}$ = {int(T_ads)} K, $P_{{ads}}$ = {P_ads:.2g} Pa")
@@ -1248,8 +1315,11 @@ def plot_storage_density_fixed_ads_3d(method, selected_frameworks, selected_mole
                             save_name=_sd_filename_pts_fixedpads(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
-                            combo_mol=mol)
+                            combo_mol=mol,
+                            sd_vmin=sd_vmin, sd_vmax=sd_vmax, sd_ticks=sd_ticks)
             any_plotted = True
+    if data_only:
+        return all_sd_collect
     if not any_plotted:
         print(f"Warning: No valid data for 3D fixed-ads storage density plot (method={method}).")
 
@@ -1263,7 +1333,8 @@ def plot_storage_density_temperature_series_3d(method, selected_frameworks, sele
                                                deg_a=2, deg_b=2, min_points=3, virial_p_min=None,
                                                coeffs_a_override=None, coeffs_b_override=None,
                                                degrees_per_combo=None, folder_temperatures=None,
-                                               qst_cache=None):
+                                               qst_cache=None,
+                                               data_only=False, sd_vmin=None, sd_vmax=None, sd_ticks=None):
     """3-D surface: desorption temperature × pressure × storage density (temperature series).
 
     *method* is ``'cc'`` or ``'virial'``.  Axes: X = T_des [K], Y = log10(P), Z = SD.
@@ -1291,6 +1362,7 @@ def plot_storage_density_temperature_series_3d(method, selected_frameworks, sele
     all_temps = [T_ads] + list(desorption_temperatures)
     p_arr = np.asarray(x_fit, dtype=float)
 
+    all_sd_collect: list[float] = []
     any_plotted = False
     for fw in selected_frameworks:
         for mol in selected_molecules:
@@ -1348,6 +1420,9 @@ def plot_storage_density_temperature_series_3d(method, selected_frameworks, sele
                         SD_vals.append(val)
             if not T_vals:
                 continue
+            if data_only:
+                all_sd_collect.extend(SD_vals)
+                continue
             label = 'Clausius\u2013Clapeyron' if method == 'cc' else method.capitalize()
             title = (f"Storage Density from {label} (temperature series)\n"
                      r"$T_{{ads}}$ = {} K".format(int(T_ads)))
@@ -1361,8 +1436,11 @@ def plot_storage_density_temperature_series_3d(method, selected_frameworks, sele
                             save_name=_sd_filename_ts_peq(method, dim_3d=True),
                             folder_temps=folder_temps,
                             combo_fw=fw,
-                            combo_mol=mol)
+                            combo_mol=mol,
+                            sd_vmin=sd_vmin, sd_vmax=sd_vmax, sd_ticks=sd_ticks)
             any_plotted = True
+    if data_only:
+        return all_sd_collect
     if not any_plotted:
         print(f"Warning: No valid data for 3D temperature-series storage density plot (method={method}).")
 
@@ -1381,7 +1459,8 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
                                       deg_a=2, deg_b=2, min_points=3, virial_p_min=None,
                                       coeffs_a_override=None, coeffs_b_override=None,
                                       degrees_per_combo=None, folder_temperatures=None,
-                                      qst_cache=None, save_data=False):
+                                      qst_cache=None, save_data=False,
+                                      data_only=False, sd_vmin=None, sd_vmax=None, sd_ticks=None):
     """3-D surface: T_ads × T_des × storage density at fixed P_ads and P_des.
 
     *method* is ``'cc'`` or ``'virial'``.
@@ -1391,6 +1470,7 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
         fittings, selected_frameworks, selected_molecules, all_temps,
         selected_fit_types, num_of_isotherm=num_of_isotherm)
 
+    all_sd_collect: list[float] = []
     any_plotted = False
     for fw in selected_frameworks:
         for mol in selected_molecules:
@@ -1450,6 +1530,10 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
             if not SD_vals:
                 continue
 
+            if data_only:
+                all_sd_collect.extend(float(v) for v in SD_vals if np.isfinite(v))
+                continue
+
             T_ads_vals = np.asarray(T_ads_vals, dtype=float)
             T_des_vals = np.asarray(T_des_vals, dtype=float)
             SD_vals = np.asarray(SD_vals, dtype=float)
@@ -1486,17 +1570,32 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
             T_ads_grid, T_des_grid = np.meshgrid(T_ads_fine, T_des_fine, indexing='ij')
 
             cmap = phelp.resolve_storage_density_3d_colormap()
-            vmin, vmax = phelp.resolve_storage_density_3d_boundries()
+            config_vmin, config_vmax = phelp.resolve_storage_density_3d_boundries()
+            _vmin = config_vmin if config_vmin is not None else sd_vmin
+            _vmax = config_vmax if config_vmax is not None else sd_vmax
+            _ticks = sd_ticks
+            if (_vmin is None or _vmax is None) and np.any(np.isfinite(SD_grid)):
+                raw_lo = float(np.nanmin(SD_grid))
+                raw_hi = float(np.nanmax(SD_grid))
+                _vmin_auto, _vmax_auto, _ = uniform_colorbar(raw_lo, raw_hi)
+                if _vmin is None:
+                    _vmin = _vmin_auto
+                if _vmax is None:
+                    _vmax = _vmax_auto
+            # Always compute nice ticks for whatever vmin/vmax we ended up with.
+            if _ticks is None and _vmin is not None and _vmax is not None:
+                _, _, _ticks = uniform_colorbar(_vmin, _vmax)
             surf_kw = dict(cmap=cmap, edgecolor='none', antialiased=True)
-            if vmin is not None:
-                surf_kw['vmin'] = vmin
-            if vmax is not None:
-                surf_kw['vmax'] = vmax
+            if _vmin is not None:
+                surf_kw['vmin'] = _vmin
+            if _vmax is not None:
+                surf_kw['vmax'] = _vmax
             fig = plt.figure(figsize=phelp.resolve_storage_density_3d_figsize())
             ax = fig.add_subplot(111, projection='3d')
             surf = ax.plot_surface(T_ads_grid, T_des_grid, SD_grid, **surf_kw)
             cb = _sd3d_apply_axis_labels_and_colorbar(
-                fig, ax, surf, SD3D_LABEL_T_ADS, SD3D_LABEL_T_DES, SD3D_LABEL_SD)
+                fig, ax, surf, SD3D_LABEL_T_ADS, SD3D_LABEL_T_DES, SD3D_LABEL_SD,
+                sd_ticks=_ticks)
             folder_temps = folder_temperatures if folder_temperatures is not None else desorption_temperatures
             out_dir_3d = _get_storage_density_out_dir(
                 selected_frameworks, selected_molecules, folder_temps,
@@ -1527,6 +1626,8 @@ def plot_storage_density_3d_Tads_Tdes(method, selected_frameworks, selected_mole
             plt.show()
             plt.close(fig)
             any_plotted = True
+    if data_only:
+        return all_sd_collect
     if not any_plotted:
         print("Warning: No valid data for 3D T_ads/T_des storage density plot.")
 
@@ -2296,7 +2397,7 @@ def plot_storage_density_mix_components_cc(
     selected_frameworks, mixture_name, qst_temperatures, T_ads, T_des_list,
     P_ads, x_fit, mixture_data, selected_fit_types,
     fits_pure, RASPA_data_pure,
-    p_min=None, p_max=None, n_loadings=40, min_temps=2,
+    p_min=None, p_max=None, P_des_max=None, n_loadings=40, min_temps=2,
     smoothing_sigma=1.5, combo_colors=None,
     out_dir=None, save_data=False, scale='both'):
     """
@@ -2421,6 +2522,8 @@ def plot_storage_density_mix_components_cc(
             # Apply P_max if provided
                 if p_max is not None:
                     p_arr = p_arr[p_arr <= float(p_max)]
+                if P_des_max is not None:
+                    p_arr = p_arr[p_arr <= float(P_des_max)]
                 if p_min is not None:
                     p_arr = p_arr[p_arr >= float(p_min)]
                 if p_arr.size == 0:
@@ -2532,7 +2635,7 @@ def plot_storage_density_mix_components_cc(
         subtitle = f"{mixture_name}, T_ads={int(T_ads)}K, T_des={int(T_des)}K, P_ads={P_ads:.2g} Pa"
         phelp.format_storage_plot(
             ax, "Storage Density (components)",
-            p_min=p_min, p_max=p_max, P_des_max=None,
+            p_min=p_min, p_max=p_max, P_des_max=P_des_max,
             global_p_min=None, subtitle=subtitle,
             scale=scale,
         )

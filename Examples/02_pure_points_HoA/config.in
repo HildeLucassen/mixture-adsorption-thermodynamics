@@ -10,7 +10,7 @@ PRESSURE_UNIT           Pa
 PRESSURE_SCALE          log                     # or linear or both
 
 # ---- Input data ----
-DATA_FILE_POINTS        Input\data_points.txt       # RASPA-style points (required when DATA_SOURCE=points)
+DATA_FILE_POINTS        Input/data_points.txt       # RASPA-style points (required when DATA_SOURCE=points)
 DATA_SOURCE             points                                     # 'fitting' or 'points'
 
 # ---- What to compute / plot ----

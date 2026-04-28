@@ -256,7 +256,30 @@ plot_flags = {
 
 _data_file_fitting_str = str(read_input_file.get('DATA_FILE_FITTING', 'none')).strip()
 _data_file_points_str  = str(read_input_file.get('DATA_FILE_POINTS',  'none')).strip()
-_data_source_str       = str(read_input_file.get('DATA_SOURCE', 'fitting')).lower()
+
+# Resolve DATA_SOURCE:
+#   - Explicit 'fitting' or 'points' in config.in → always respected.
+#   - Omitted → auto-detect: use 'fitting' only when DATA_FILE_FITTING resolves
+#     to an existing file; otherwise fall back to 'points'.
+_data_source_raw = read_input_file.get('DATA_SOURCE')
+if _data_source_raw is not None:
+    _data_source_str = str(_data_source_raw).lower()
+else:
+    def _fitting_file_exists(s):
+        if not s or s.lower() == 'none':
+            return False
+        p = Path(s)
+        if p.is_absolute():
+            return p.is_file()
+        return (_repo_root / p).is_file()
+
+    _data_source_str = 'fitting' if _fitting_file_exists(_data_file_fitting_str) else 'points'
+    if _data_source_str == 'points':
+        print(
+            f"DATA_SOURCE not set and no fitting file found "
+            f"('{_data_file_fitting_str}'); defaulting to DATA_SOURCE=points."
+        )
+
 # Primary file drives load_files_dir (kept for any legacy usage)
 _data_file_str = (_data_file_fitting_str if _data_source_str == 'fitting'
                   else _data_file_points_str)

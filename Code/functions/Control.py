@@ -117,11 +117,16 @@ def _plot_clausius_clapeyron_with_virial_once(
                 # Clean names for display
                 fw_display = phelp.clean_material_name(fw)
                 mol_display = phelp.get_molecule_display_name(mol)
-                # HoA rule: color encodes adsorbate (molecule)
-                cc_color = phelp.get_color_for_molecule(mol) or 'C0'
-                cc_ls = phelp.get_hoa_linestyle(
-                    fw, 'clausius_clapeyron', 'method', method_linestyles=method_linestyles
-                )
+                # Color/linestyle scheme: single adsorbate + multiple adsorbents → framework colors
+                _color_by_fw = (len(selected_molecules or []) == 1 and len(selected_frameworks or []) > 1)
+                if _color_by_fw:
+                    cc_color = phelp.get_color_for_structure(fw) or 'C0'
+                    cc_ls = '-'
+                else:
+                    cc_color = phelp.get_color_for_molecule(mol) or 'C0'
+                    cc_ls = phelp.get_hoa_linestyle(
+                        fw, 'clausius_clapeyron', 'method', method_linestyles=method_linestyles
+                    )
                 # Get marker for this framework from marker mapping
                 marker = phelp.get_marker_for_material(fw) if show_markers else ''
                 ax.plot(
@@ -220,11 +225,16 @@ def _plot_clausius_clapeyron_with_virial_once(
                             # Clean names for display
                             clean_fw = phelp.clean_material_name(fw)
                             clean_mol = phelp.get_molecule_display_name(mol)
-                            # HoA rule: color encodes adsorbate (molecule)
-                            virial_color = phelp.get_color_for_molecule(mol) or 'C1'
-                            virial_ls = phelp.get_hoa_linestyle(
-                                fw, 'virial', 'method', method_linestyles=method_linestyles
-                            )
+                            # Color/linestyle scheme: single adsorbate + multiple adsorbents → framework colors
+                            _color_by_fw = (len(selected_molecules or []) == 1 and len(selected_frameworks or []) > 1)
+                            if _color_by_fw:
+                                virial_color = phelp.get_color_for_structure(fw) or 'C1'
+                                virial_ls = '-'
+                            else:
+                                virial_color = phelp.get_color_for_molecule(mol) or 'C1'
+                                virial_ls = phelp.get_hoa_linestyle(
+                                    fw, 'virial', 'method', method_linestyles=method_linestyles
+                                )
                             # Get marker for this framework from marker mapping
                             marker = phelp.get_marker_for_material(fw) if show_markers else ''
                             ax.plot(
@@ -315,6 +325,7 @@ def _plot_clausius_clapeyron_with_virial_once(
     ax.set_ylim(top=global_max_qst * 1.05)
     ax.set_xlim(left=0, right=global_max_loading * 1.05)
     ax.grid(True, which='both', ls='--', alpha=phelp.ALPHA_GRID)
+    _ctrl_color_by_fw = (len(selected_molecules or []) == 1 and len(selected_frameworks or []) > 1)
     phelp.build_hoa_proxy_legend(
         ax,
         molecules_present=molecules_present if molecules_present else selected_molecules,
@@ -323,6 +334,7 @@ def _plot_clausius_clapeyron_with_virial_once(
         method_linestyles=method_linestyles,
         fontsize=phelp.AXIS_LEGEND_SIZE,
         loc='best',
+        color_by_framework=_ctrl_color_by_fw,
     )
     phelp.apply_unified_axes_layout(fig, ax)
 
@@ -446,9 +458,16 @@ def plot_lnP_vs_loading_from_virial(RASPA_data=None, framework=None, molecule=No
     save_out_dir = out_dir
     if save_out_dir is None:
         try:
-            base_dir = str(init.get_pipeline_run_root())
-            run_folder_name = f"{'-'.join([str(x).replace(' ', '_') for x in fw_list])}_{'-'.join([str(x).replace(' ', '_') for x in mol_list])}_{'-'.join([str(x).replace(' ', '_') for x in temp_list])}"
-            save_out_dir = os.path.join(base_dir, "Output", run_folder_name, "Heat_of_Adsorption")
+            from pathlib import Path as _Path
+            _base_dir = _Path(init.get_pipeline_run_root())
+            _plots_root = _base_dir / "Output"
+            _natural = (
+                f"{'-'.join([str(x).replace(' ', '_') for x in fw_list])}"
+                f"_{'-'.join([str(x).replace(' ', '_') for x in mol_list])}"
+                f"_{'-'.join([str(x).replace(' ', '_') for x in temp_list])}"
+            )
+            run_folder_name = phelp._resolve_run_folder(_plots_root, _natural)
+            save_out_dir = str(_plots_root / run_folder_name / "Heat_of_Adsorption")
             os.makedirs(save_out_dir, exist_ok=True)
         except Exception:
             save_out_dir = None

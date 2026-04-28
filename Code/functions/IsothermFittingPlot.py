@@ -23,12 +23,22 @@ def _save_isotherm_rows_to_run_folder(rows, fw_part, mol_part, temp_part, prefix
         base_dir = base_dir or init.get_pipeline_run_root()
         plots_root = base_dir / 'Output'
 
-        run_folder_name = f"{fw_part}_{mol_part}_{temp_part}"
+        run_folder_name = phelp._resolve_run_folder(plots_root, f"{fw_part}_{mol_part}_{temp_part}")
         saved_dir = plots_root / run_folder_name / 'Basic_Data' / 'saved'
-        saved_dir.mkdir(parents=True, exist_ok=True)
 
-        # Same idea as ``_save_plot`` PNGs: run folder already encodes fw/mol/temps.
+        # Build the full path first so we can check its length before creating any directories.
         data_path = saved_dir / f"{prefix}.txt"
+        _MAX_WIN_PATH = 260
+        if len(str(data_path)) > _MAX_WIN_PATH:
+            print(
+                f"\nWarning: isotherm data path is {len(str(data_path))} characters, "
+                f"which exceeds the Windows MAX_PATH limit of {_MAX_WIN_PATH}.\n"
+                f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+                f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py.\n"
+            )
+            return
+
+        saved_dir.mkdir(parents=True, exist_ok=True)
         with data_path.open('w', encoding='utf-8') as f:
             f.write(
                 "framework\tmolecule\ttemperature_K\tpressure_Pa\tloading_mol_per_kg\n"
@@ -39,7 +49,11 @@ def _save_isotherm_rows_to_run_folder(rows, fw_part, mol_part, temp_part, prefix
                     f"{r['pressure']}\t{r['loading']}\n"
                 )
     except Exception as e:
-        print(f"Warning: failed to write isotherm data file: {e}")
+        print(
+            f"Warning: failed to write isotherm data file: {e}\n"
+            f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+            f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py."
+        )
 
 def plot_isotherm_fitting(selected_frameworks, selected_molecules, selected_temperatures,
                           selected_fit_types, fittings, RASPA_data, combo_colors,
@@ -258,7 +272,7 @@ def plot_isotherm_fitting(selected_frameworks, selected_molecules, selected_temp
         # (and any fitted-curve samples included in the plot).
         data_source = str(getattr(Input, "config", {}).get("data_source", "fitting")).lower()
         all_rows = data_rows + fit_rows
-        if all_rows and save_data and data_source != "fitting":
+        if all_rows and save_data and data_source != "fitting" and out_path is not None:
             try:
                 base = Path(out_path)
                 # Create a 'saved' subfolder under the Basic_Data folder (or

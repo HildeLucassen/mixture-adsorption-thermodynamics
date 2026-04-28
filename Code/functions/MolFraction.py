@@ -23,11 +23,22 @@ def _save_mol_fraction_rows_to_run_folder(rows, fw_part, mix_part, temp_part, pr
     try:
         base_dir = init.get_pipeline_run_root()
         plots_root = base_dir / 'Output'
-        run_folder_name = f"{fw_part}_{mix_part}_{temp_part}"
+        run_folder_name = phelp._resolve_run_folder(plots_root, f"{fw_part}_{mix_part}_{temp_part}")
         saved_dir = plots_root / run_folder_name / 'Basic_Data' / 'saved'
-        saved_dir.mkdir(parents=True, exist_ok=True)
 
+        # Build the full path first so we can check its length before creating any directories.
         data_path = saved_dir / f"{prefix}.txt"
+        _MAX_WIN_PATH = 260
+        if len(str(data_path)) > _MAX_WIN_PATH:
+            print(
+                f"\nWarning: mol-fraction data path is {len(str(data_path))} characters, "
+                f"which exceeds the Windows MAX_PATH limit of {_MAX_WIN_PATH}.\n"
+                f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+                f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py.\n"
+            )
+            return
+
+        saved_dir.mkdir(parents=True, exist_ok=True)
         with data_path.open('w', encoding='utf-8') as f:
             f.write("framework\tmolecule\ttemperature_K\tpressure_Pa\tmole_fraction\n")
             for r in rows:
@@ -36,7 +47,11 @@ def _save_mol_fraction_rows_to_run_folder(rows, fw_part, mix_part, temp_part, pr
                     f"{r['pressure']}\t{r['mole_fraction']}\n"
                 )
     except Exception as e:
-        print(f"Warning: failed to write mol-fraction data file: {e}")
+        print(
+            f"Warning: failed to write mol-fraction data file: {e}\n"
+            f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+            f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py."
+        )
 
 
 def plot_mol_fraction_vs_pressure(mixture_data, selected_frameworks, selected_molecules,

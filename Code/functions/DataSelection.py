@@ -32,6 +32,66 @@ import PlotHelpers as phelp
 # Private helpers
 # ---------------------------------------------------------------------------
 
+def _hybrid_interp_q_to_p(q_sorted, p_sorted, q_query):
+    """Interpolate pressure from loading using a hybrid PCHIP / linear scheme.
+
+    The decision between PCHIP and linear is based on the **log-pressure
+    spacing** of each segment, not the loading spacing.  This correctly
+    handles data that is log-evenly spaced in pressure (e.g. RASPA points at
+    1, 3, 10, 30, … Pa): those all have the same Δ(ln P) ≈ ln(3), so every
+    segment is classified as dense and PCHIP is used everywhere.  A genuinely
+    outlying or missing pressure level produces a much larger Δ(ln P) and
+    correctly falls back to linear interpolation.
+
+    For each segment between consecutive data points (sorted by loading):
+      - Δ(ln P) ≤ 2.5 × median(Δ(ln P))  → PCHIP  (well-sampled in pressure)
+      - Δ(ln P) >  2.5 × median(Δ(ln P)) → linear (outlier / sparse gap)
+
+    Points outside [q_sorted[0], q_sorted[-1]] return NaN.
+    """
+    q_sorted = np.asarray(q_sorted, dtype=float)
+    p_sorted = np.asarray(p_sorted, dtype=float)
+    q_query  = np.asarray(q_query,  dtype=float)
+
+    n = len(q_sorted)
+    if n < 2:
+        return np.full(q_query.shape, np.nan)
+
+    # Use log-pressure spacing to classify segments.
+    with np.errstate(divide='ignore', invalid='ignore'):
+        lnp = np.where(p_sorted > 0, np.log(p_sorted), np.nan)
+    d_lnp     = np.abs(np.diff(lnp))
+    finite_gaps = d_lnp[np.isfinite(d_lnp)]
+    if finite_gaps.size == 0:
+        threshold = np.inf
+    else:
+        threshold = 2.5 * float(np.median(finite_gaps))
+
+    # Pre-compute both candidates on the full query grid.
+    if n >= 3:
+        try:
+            p_pchip = PchipInterpolator(q_sorted, p_sorted, extrapolate=False)(q_query)
+        except Exception:
+            p_pchip = np.full(q_query.shape, np.nan)
+    else:
+        p_pchip = np.full(q_query.shape, np.nan)
+
+    p_linear = np.interp(q_query, q_sorted, p_sorted, left=np.nan, right=np.nan)
+
+    # Select per query point based on the log-pressure gap of the enclosing segment.
+    result  = np.full(q_query.shape, np.nan)
+    idx_seg = np.clip(
+        np.searchsorted(q_sorted, q_query, side='right') - 1,
+        0, n - 2,
+    )
+    use_pchip = np.where(np.isfinite(d_lnp[idx_seg]), d_lnp[idx_seg] <= threshold, True)
+    in_range  = (q_query >= q_sorted[0]) & (q_query <= q_sorted[-1])
+
+    result = np.where(in_range & use_pchip,  p_pchip,  result)
+    result = np.where(in_range & ~use_pchip, p_linear, result)
+    return result
+
+
 def _deduplicate_loading_pressure(q_arr, p_arr):
     """Remove duplicate loading values by averaging pressure at each duplicate."""
     order = np.argsort(q_arr)
@@ -121,9 +181,8 @@ def _unified_loading_range(input_rows, framework, molecule, temperatures,
             continue
 
         try:
-            interp_q_to_p = PchipInterpolator(q_sorted, p_sorted, extrapolate=False)
             q_test = np.linspace(q_sorted.min(), q_sorted.max(), 500)
-            p_test = interp_q_to_p(q_test)
+            p_test = _hybrid_interp_q_to_p(q_sorted, p_sorted, q_test)
             valid_mask = (
                 (p_test >= p_min_bound) & (p_test <= p_max_bound) & np.isfinite(p_test)
             )
@@ -243,8 +302,7 @@ def _build_interpolation_matrices(input_rows, framework, molecule, temperatures,
             continue
 
         try:
-            interpolator = PchipInterpolator(q_sorted, p_sorted, extrapolate=False)
-            p_interp = interpolator(loadings)
+            p_interp = _hybrid_interp_q_to_p(q_sorted, p_sorted, loadings)
         except Exception:
             p_interp = np.interp(loadings, q_sorted, p_sorted, left=np.nan, right=np.nan)
 

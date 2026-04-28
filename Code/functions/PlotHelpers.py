@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -13,7 +14,7 @@ import math
 R = 8.31446261815324  # universal gas constant [J/mol/K]
 
 # Unified plotting style settings
-MARKER_STYLES = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', 'd', '|', '_']
+MAX_RUN_FOLDER_LEN = 60 # maximum file lenght from the main folder 
 UNIFIED_FIGSIZE = (9, 8)
 LINEWIDTH = 6
 AXIS_LW = 3
@@ -76,6 +77,7 @@ STORAGE_DENSITY_3D_DEFAULTS = {
 _MARKER_MAP = None
 # Structure/framework line styles - set from Input.py via set_structure_linestyle_map()
 LINESTYLE_STYLES = ['-', '--', '-.', ':']
+MARKER_STYLES = ['o', 's', '^', 'D', 'v', '<', '>', 'p', '*', 'h', 'H', '+', 'x', 'd', '|', '_']
 _STRUCTURE_LINESTYLE_MAP = None
 _AUTO_LINESTYLE_ASSIGNMENTS = {}
 # Allow overriding the auto palettes from Input/design.in
@@ -552,11 +554,19 @@ def build_hoa_proxy_legend(
     fontsize="14",
     loc="best",
     method_legend_labels=None,
+    color_by_framework=False,
 ):
     """
-    Build one combined HoA proxy legend:
-    - colors encode molecules
-    - linestyles encode structures (single-method) OR methods (multi-method)
+    Build one combined HoA proxy legend.
+
+    Default (color_by_framework=False):
+      - colors encode molecules
+      - linestyles encode structures (single-method) OR methods (multi-method)
+
+    color_by_framework=True  (single adsorbate, multiple adsorbents):
+      - colors encode frameworks; molecule entry is omitted from the legend
+      - no extra linestyle rows for framework (color already encodes them)
+      - method linestyle rows are still shown when multiple methods are present
 
     method_legend_labels: optional dict overriding any method key (rare).
     CC and Virial are fixed unless overridden here; hoa_file uses config HOA_LEGEND_FILE (default Data).
@@ -564,35 +574,58 @@ def build_hoa_proxy_legend(
     proxy_handles = []
     proxy_labels = []
 
-    mol_seen = set()
-    for mol in molecules_present or []:
-        if mol in mol_seen:
-            continue
-        mol_seen.add(mol)
-        color = get_color_for_molecule(mol) or "gray"
-        proxy_handles.append(Line2D([0], [0], color=color, lw=LINEWIDTH))
-        proxy_labels.append(get_molecule_display_name(mol))
-
-    mode = choose_hoa_proxy_linestyle_mode(methods_present)
-    if mode == "method":
-        method_seen = set()
-        for method in methods_present or []:
-            if method in method_seen:
+    if color_by_framework:
+        # Colors encode frameworks; skip molecule color entries.
+        fw_seen = set()
+        for fw in frameworks_present or []:
+            if fw in fw_seen:
                 continue
-            method_seen.add(method)
-            ls = get_hoa_linestyle(None, method, mode, method_linestyles=method_linestyles)
-            proxy_handles.append(Line2D([0], [0], color="black", lw=LINEWIDTH, linestyle=ls))
-            pretty = hoa_method_legend_display_name(method, overrides=method_legend_labels)
-            proxy_labels.append(pretty)
-    else:
-        # Only add a structure/framework row when there are multiple frameworks —
-        # a single structure has one linestyle and adding it to the legend gives no information.
-        unique_fws = list(dict.fromkeys(frameworks_present or []))
-        if len(unique_fws) > 1:
-            for fw in unique_fws:
-                ls = get_hoa_linestyle(fw, None, mode, method_linestyles=method_linestyles)
+            fw_seen.add(fw)
+            color = get_color_for_structure(fw) or "gray"
+            proxy_handles.append(Line2D([0], [0], color=color, lw=LINEWIDTH))
+            proxy_labels.append(clean_material_name(fw))
+        # Still show method rows when multiple HoA methods are present.
+        mode = choose_hoa_proxy_linestyle_mode(methods_present)
+        if mode == "method":
+            method_seen = set()
+            for method in methods_present or []:
+                if method in method_seen:
+                    continue
+                method_seen.add(method)
+                ls = get_hoa_linestyle(None, method, mode, method_linestyles=method_linestyles)
                 proxy_handles.append(Line2D([0], [0], color="black", lw=LINEWIDTH, linestyle=ls))
-                proxy_labels.append(clean_material_name(fw))
+                pretty = hoa_method_legend_display_name(method, overrides=method_legend_labels)
+                proxy_labels.append(pretty)
+    else:
+        mol_seen = set()
+        for mol in molecules_present or []:
+            if mol in mol_seen:
+                continue
+            mol_seen.add(mol)
+            color = get_color_for_molecule(mol) or "gray"
+            proxy_handles.append(Line2D([0], [0], color=color, lw=LINEWIDTH))
+            proxy_labels.append(get_molecule_display_name(mol))
+
+        mode = choose_hoa_proxy_linestyle_mode(methods_present)
+        if mode == "method":
+            method_seen = set()
+            for method in methods_present or []:
+                if method in method_seen:
+                    continue
+                method_seen.add(method)
+                ls = get_hoa_linestyle(None, method, mode, method_linestyles=method_linestyles)
+                proxy_handles.append(Line2D([0], [0], color="black", lw=LINEWIDTH, linestyle=ls))
+                pretty = hoa_method_legend_display_name(method, overrides=method_legend_labels)
+                proxy_labels.append(pretty)
+        else:
+            # Only add a structure/framework row when there are multiple frameworks —
+            # a single structure has one linestyle and adding it to the legend gives no information.
+            unique_fws = list(dict.fromkeys(frameworks_present or []))
+            if len(unique_fws) > 1:
+                for fw in unique_fws:
+                    ls = get_hoa_linestyle(fw, None, mode, method_linestyles=method_linestyles)
+                    proxy_handles.append(Line2D([0], [0], color="black", lw=LINEWIDTH, linestyle=ls))
+                    proxy_labels.append(clean_material_name(fw))
 
     if proxy_handles:
         ax.legend(proxy_handles, proxy_labels, fontsize=AXIS_LEGEND_SIZE, loc=loc)
@@ -751,14 +784,32 @@ def set_molecule_display_name_override(mapping):
         return
     _MOLECULE_DISPLAY_NAME_OVERRIDE = {str(k).strip().lower(): v for k, v in mapping.items()}
 
+def _fmt_mol_label(name: str) -> str:
+    """Convert _N patterns in a molecule name to matplotlib math subscripts.
+
+    Examples
+    --------
+    CO_2  → CO$_{2}$
+    H_2O  → H$_{2}$O
+    N_2   → N$_{2}$
+    R407F → R407F  (unchanged — no underscore)
+    """
+    return re.sub(r'_(\w+)', r'$_{\1}$', str(name))
+
+
 def get_molecule_display_name(mol):
-    """Return display name for molecule (e.g. R600 for butane). Use for labels and titles."""
+    """Return display name for molecule (e.g. R600 for butane). Use for labels and titles.
+
+    Underscores in molecule names are rendered as subscripts (CO_2 → CO$_{2}$)
+    unless the name has been overridden via set_molecule_display_name_override(),
+    in which case the override is returned as-is.
+    """
     if mol is None:
         return None
     key = str(mol).strip().lower()
     if key in _MOLECULE_DISPLAY_NAME_OVERRIDE:
         return _MOLECULE_DISPLAY_NAME_OVERRIDE[key]
-    return clean_material_name(mol)
+    return _fmt_mol_label(str(mol))
 
 def set_axis_limits_nice(ax, pad_fraction=0.02):
     """
@@ -1120,6 +1171,60 @@ def apply_unified_axes_layout(fig, ax):
         pass
 
 
+
+
+def _resolve_run_folder(plots_root: Path, natural_name: str) -> str:
+    """Return *natural_name* unchanged, or an integer alias string when it is too long.
+
+    Registry: ``Output/folder_index.txt`` — one line per aliased run:
+        1: Bhathia_01-Bhathia_02_R600-R125_283-303-333-353
+
+    The same number is reused on re-runs with identical settings.
+    Short names never get an entry.
+    """
+    if len(natural_name) <= MAX_RUN_FOLDER_LEN:
+        return natural_name
+
+    registry = plots_root / "folder_index.txt"
+    mapping: dict[int, str] = {}
+    if registry.is_file():
+        for line in registry.read_text(encoding="utf-8").splitlines():
+            if ": " in line:
+                num_str, name = line.split(": ", 1)
+                try:
+                    mapping[int(num_str.strip())] = name.strip()
+                except ValueError:
+                    pass
+
+    # Reuse existing alias if already registered
+    for num, name in mapping.items():
+        if name == natural_name:
+            return str(num)
+
+    # Assign next integer
+    next_num = max(mapping.keys(), default=0) + 1
+    mapping[next_num] = natural_name
+    try:
+        plots_root.mkdir(parents=True, exist_ok=True)
+        registry.write_text(
+            "\n".join(f"{n}: {nm}" for n, nm in sorted(mapping.items())),
+            encoding="utf-8",
+        )
+        # Write a small info file inside the numbered folder for quick reference
+        folder = plots_root / str(next_num)
+        folder.mkdir(parents=True, exist_ok=True)
+        info_path = folder / "run_info.txt"
+        if not info_path.exists():
+            info_path.write_text(
+                f"Run folder : {next_num}\nFull name  : {natural_name}\n",
+                encoding="utf-8",
+            )
+    except Exception as _e:
+        print(f"Warning: could not write folder_index.txt: {_e}")
+
+    return str(next_num)
+
+
 def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, selected_temperatures, fig=None, out_dir=None, temp_label_override=None, fw_label_override=None, mol_label_override=None, filename_suffix=None, *, tight_bbox=False, bbox_extra_artists=None):
     """Save a matplotlib plot. Default location is under ``Output/``.
 
@@ -1177,23 +1282,40 @@ def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, sele
     # create a deterministic run folder under base_dir/Output using the parts.
     if out_dir is not None:
         out_dir = Path(out_dir)
-        out_dir.mkdir(parents=True, exist_ok=True)
     else:
         plots_root = base_dir / 'Output'
         # Use a deterministic folder name based on the selection parts so that
-        # all plots from the same selection are stored together. If the folder
-        # already exists reuse it; otherwise create it.
-        run_folder_name = f"{fw_part}_{mol_part}_{temp_part}"
+        # all plots from the same selection are stored together. If the name is
+        # too long, _resolve_run_folder aliases it to an integer.
+        run_folder_name = _resolve_run_folder(plots_root, f"{fw_part}_{mol_part}_{temp_part}")
         out_dir = plots_root / run_folder_name / subfolder_name
-        out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Filename without timestamp to enable overwriting (no fw/mol/temp in stem; see run folder).
+    # Build the full path BEFORE creating any directories so we can check
+    # its length first — this prevents empty folders being created.
     if filename_suffix is not None:
         safe_suffix = str(filename_suffix).replace(" ", "_")
         filename = f"{prefix}_{safe_suffix}.png"
     else:
         filename = f"{prefix}.png"
     out_path = out_dir / filename
+
+    # On Windows the default MAX_PATH limit is 260 characters. Warn early so
+    # the user gets a clear message instead of a cryptic OS error.
+    _MAX_WIN_PATH = 260
+    _out_path_str = str(out_path)
+    if len(_out_path_str) > _MAX_WIN_PATH:
+        print(
+            f"\nWarning: output path is {len(_out_path_str)} characters, which exceeds the "
+            f"Windows MAX_PATH limit of {_MAX_WIN_PATH}.\n"
+            f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN (currently {MAX_RUN_FOLDER_LEN}) in\n"
+            f"  Code/functions/PlotHelpers.py so the run-folder name is aliased "
+            f"to a short integer sooner.\n"
+        )
+        return None  # signal failure so callers skip data-file saves
+
+    # Path is within limits — now safe to create the directory.
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     try:
         if fig is None:
             plt.savefig(str(out_path), dpi=300, format='png')
@@ -1222,7 +1344,13 @@ def _save_plot(prefix, out_subdir, selected_frameworks, selected_molecules, sele
                     kw['bbox_extra_artists'] = bbox_extra_artists
             fig.savefig(str(out_path), **kw)
     except Exception as e:
-        print(f"Warning: failed to save {prefix} plot: {e}")
+        _msg = str(e)
+        _path_hint = (
+            f"\n  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+            f"(currently {MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py."
+        )
+        print(f"Warning: failed to save {prefix} plot: {e}"
+              + (_path_hint if any(kw in _msg.lower() for kw in ("path", "name", "long", "file", "directory")) else ""))
     return out_path
 
 

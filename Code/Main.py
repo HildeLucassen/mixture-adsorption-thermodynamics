@@ -454,19 +454,33 @@ _effective_style_lines = _build_effective_style_summary_lines(
     plot_temperatures=selection.get('temp'),
 )
 
-_run_folder = (
+_natural_run_folder = (
     f"{'-'.join(str(x).replace(' ', '_') for x in (_sel_fw or ['all']))}_"
     f"{'-'.join(str(x).replace(' ', '_') for x in (_sel_mol or ['all']))}_"
     f"{'-'.join(str(x).replace(' ', '_') for x in (_sel_temp or ['all']))}"
 )
+_run_folder = phelp._resolve_run_folder(repo_root / "Output", _natural_run_folder)
 _settings_out_dir = repo_root / "Output" / _run_folder
-_settings_out_dir.mkdir(parents=True, exist_ok=True)
 _summary_name = (
     f"Summary_{'-'.join(str(x).replace(' ', '_') for x in (_sel_fw or ['all']))}"
     f"_{'-'.join(str(x).replace(' ', '_') for x in (_sel_mol or ['all']))}"
     f"_{'-'.join(str(x).replace(' ', '_') for x in (_sel_temp or ['all']))}.txt"
 )
 _settings_path = _settings_out_dir / _summary_name
+# Guard: only create the output directory when the full settings path fits within
+# Windows MAX_PATH (260). This prevents an empty long-named folder being left
+# behind when the file write later fails on path length.
+_MAX_WIN_PATH = 260
+if len(str(_settings_path)) > _MAX_WIN_PATH:
+    print(
+        f"\nWarning: settings-summary path is {len(str(_settings_path))} characters, which "
+        f"exceeds the Windows MAX_PATH limit of {_MAX_WIN_PATH}.\n"
+        f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+        f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py.\n"
+    )
+    _settings_path = None  # skip writing
+else:
+    _settings_out_dir.mkdir(parents=True, exist_ok=True)
 
 _design_choice_lines = []
 _m = _subset_map(getattr(Input, 'structure_linestyle_mapping', {}), _sel_fw)
@@ -510,10 +524,15 @@ _settings_lines = [
 if _design_choice_lines:
     _settings_lines.extend(["", "Design choices:", *_design_choice_lines])
 _settings_lines.extend([*_effective_style_lines, "=== End Settings ===", ""])
-try:
-    _settings_path.write_text("\n".join(_settings_lines), encoding="utf-8")
-except Exception as _e:
-    print(f"Warning: failed to write settings summary file at {_settings_path}: {_e}")
+if _settings_path is not None:
+    try:
+        _settings_path.write_text("\n".join(_settings_lines), encoding="utf-8")
+    except Exception as _e:
+        print(
+            f"Warning: failed to write settings summary file: {_e}\n"
+            f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+            f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py."
+        )
 
 # ---------------------------------------------------------------------------
 # Build calculation data set (synthetic from fits, or raw data points)
@@ -609,56 +628,91 @@ if _hoa_needs_three_temps:
 # ---------------------------------------------------------------------------
 # Per-gas-component DataSelection dataset for mixture pure HOA (CC + Virial).
 # For BOTH plots the loading range must come from the same DataSelection grid —
-# identical to what the pure-component CC/Virial plots use.  We always
-# synthesise from fittings so that both paths use fitting values.
-# Uses _fits_from_disk so DATA_SOURCE=points still gets per-gas rows from DATA_FILE_FITTING.
+# identical to what the pure-component CC/Virial plots use.
+#
+# Fits path  (DATA_SOURCE=fitting): synthesise from fittings → build DataSelection grid.
+# Points path (DATA_SOURCE=points): call build_dataset for each gas component separately
+#   using the raw data points.  The resulting rows have a uniform loading linspace
+#   (required by _rows_to_p_mat) and no 'mixture_pure' field (passes
+#   only_pure_adsorption=True filter inside _rows_to_p_mat / _hoa_pure_loading_grid_n).
 # ---------------------------------------------------------------------------
 raspa_pure_mixture_components = None
 if (
     config.get('isotherm_type') == 'mixture'
     and mixture_data
     and selection.get('fw')
-    and _fits_from_disk
     and (Input.plot_flags.get('Mixture_HOA_Pure_CC') or Input.plot_flags.get('Mixture_HOA_Pure_Virial'))
 ):
     _cmp_mols = sorted({d['molecule'] for d in mixture_data})
     if _cmp_mols:
-        try:
-            _cmp_synth = IsothermFittingPlot.synthesize_points_from_fittings(
-                fittings=_fits_from_disk,
-                selected_frameworks=selection['fw'],
-                selected_molecules=_cmp_mols,
-                selected_temperatures=selection['temp'],
-                selected_fit_types=selection['fit_types'],
-                n_loadings=config['n_loadings'],
-                p_min=config['P_MIN'],
-                p_max=config['P_MAX'],
-                p_grid=None,
-                formula_fit_types=selection['fit_types'],
-                num_of_isotherm=selection.get('num_of_isotherm'),
-                pressure_scale='log',
-                save_data=False,
-                folder_molecule_label=str(selection['mol'][0]),
-            )
-            if _cmp_synth:
-                _cmp_ds = ds.build_dataset(
-                    _cmp_synth,
-                    selection['fw'],
-                    _cmp_mols,
-                    selection['temp'],
+        if config['data_source'] == 'points':
+            # Build a proper DataSelection grid per gas component from the raw data
+            # points.  build_dataset creates a uniform loading linspace for all
+            # temperatures, which is what _rows_to_p_mat requires, and returns rows
+            # without a 'mixture_pure' field so they pass the
+            # only_pure_adsorption=True filter inside _rows_to_p_mat /
+            # _hoa_pure_loading_grid_n.
+            _cmp_rows_all: list = []
+            for _comp in _cmp_mols:
+                _comp_raw = [
+                    row for row in data_points_calc
+                    if row.get('molecule') == _comp
+                ]
+                if not _comp_raw:
+                    continue
+                _comp_ds = ds.build_dataset(
+                    _comp_raw,
+                    selection['fw'], [_comp], selection['temp'],
+                    n_loadings=config['n_loadings'],
+                    p_min=config['P_MIN'], p_max=config['P_MAX'],
+                    min_temps=CC_MIN_TEMPS,
+                )
+                _cmp_rows_all.extend(_comp_ds or [])
+            if _cmp_rows_all:
+                raspa_pure_mixture_components = _cmp_rows_all
+                print(f"Mixture components (points): {_cmp_mols}")
+            else:
+                print(
+                    f"Warning: no per-component DataSelection grid could be built for "
+                    f"{_cmp_mols}; mixture pure HOA CC/Virial will be skipped."
+                )
+        elif _fits_from_disk:
+            try:
+                _cmp_synth = IsothermFittingPlot.synthesize_points_from_fittings(
+                    fittings=_fits_from_disk,
+                    selected_frameworks=selection['fw'],
+                    selected_molecules=_cmp_mols,
+                    selected_temperatures=selection['temp'],
+                    selected_fit_types=selection['fit_types'],
                     n_loadings=config['n_loadings'],
                     p_min=config['P_MIN'],
                     p_max=config['P_MAX'],
-                    min_temps=CC_MIN_TEMPS,
+                    p_grid=None,
+                    formula_fit_types=selection['fit_types'],
+                    num_of_isotherm=selection.get('num_of_isotherm'),
+                    pressure_scale='log',
+                    save_data=False,
+                    folder_molecule_label=str(selection['mol'][0]),
                 )
-                if _cmp_ds:
-                    raspa_pure_mixture_components = _cmp_ds
-                    print(f"Mixture components: {_cmp_mols}")
-        except Exception as _e_cmp:
-            print(
-                f"Warning: mixture pure-component DataSelection failed ({_e_cmp}); "
-                "pure HOA CC/Virial will derive loading range from synthesised points directly."
-            )
+                if _cmp_synth:
+                    _cmp_ds = ds.build_dataset(
+                        _cmp_synth,
+                        selection['fw'],
+                        _cmp_mols,
+                        selection['temp'],
+                        n_loadings=config['n_loadings'],
+                        p_min=config['P_MIN'],
+                        p_max=config['P_MAX'],
+                        min_temps=CC_MIN_TEMPS,
+                    )
+                    if _cmp_ds:
+                        raspa_pure_mixture_components = _cmp_ds
+                        print(f"Mixture components: {_cmp_mols}")
+            except Exception as _e_cmp:
+                print(
+                    f"Warning: mixture pure-component DataSelection failed ({_e_cmp}); "
+                    "pure HOA CC/Virial will derive loading range from synthesised points directly."
+                )
 
 # ---------------------------------------------------------------------------
 # Virial polynomial degrees — resolved before the isotherm-type split so they
@@ -815,6 +869,7 @@ if config['isotherm_type'] == 'mixture':
             n_loadings=config['n_loadings'],
             min_temps=CC_MIN_TEMPS,
             smoothing_sigma=CC_SMOOTHING_SIGMA,
+            use_direct_interpolation=(config['data_source'] == 'points'),
             combo_colors=colors,
             out_dir=None,
             save_data=config.get('out_dir', False),
@@ -1061,23 +1116,47 @@ if config['isotherm_type'] != 'mixture':
                 scale=config.get('pressure_scale', 'both'), **_kw)
 
         if _run_sd_3d:
+            # Pass 1: data-only to collect all SD values and compute a shared colorbar range.
+            _sd_raw: list = []
+            _sd_raw += sd.plot_storage_density_3d(
+                _m, selection['fw'], selection['mol'], config['T_des'], _sd_fit_types_for_sd,
+                _sd_fits_for_sd, config['P_ads'], _x, colors, _raspa, data_only=True, **_kw) or []
+            _sd_raw += sd.plot_storage_density_fixed_ads_3d(
+                _m, selection['fw'], selection['mol'], config['T_ads'], config['P_ads'],
+                config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa,
+                data_only=True, **_kw) or []
+            _sd_raw += sd.plot_storage_density_temperature_series_3d(
+                _m, selection['fw'], selection['mol'], config['T_ads'], config['T_des'],
+                _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa, data_only=True, **_kw) or []
+            _sd_raw += sd.plot_storage_density_3d_Tads_Tdes(
+                _m, selection['fw'], selection['mol'], selection['temp'], config['T_des'],
+                _sd_fit_types_for_sd, _sd_fits_for_sd,
+                config['P_ads_TT'], config['P_des_TT'], _x, colors, _raspa,
+                data_only=True, **_kw) or []
+            _sd_vmin, _sd_vmax, _sd_ticks = sd._nice_colorbar_step_from_values(_sd_raw)
+
+            # Pass 2: actual plotting with shared colorbar bounds.
             sd.plot_storage_density_3d(
                 _m, selection['fw'], selection['mol'], config['T_des'], _sd_fit_types_for_sd,
-                _sd_fits_for_sd, config['P_ads'], _x, colors, _raspa, **_kw)
+                _sd_fits_for_sd, config['P_ads'], _x, colors, _raspa,
+                sd_vmin=_sd_vmin, sd_vmax=_sd_vmax, sd_ticks=_sd_ticks, **_kw)
 
             sd.plot_storage_density_fixed_ads_3d(
                 _m, selection['fw'], selection['mol'], config['T_ads'], config['P_ads'],
-                config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa, **_kw)
+                config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa,
+                sd_vmin=_sd_vmin, sd_vmax=_sd_vmax, sd_ticks=_sd_ticks, **_kw)
 
             sd.plot_storage_density_temperature_series_3d(
                 _m, selection['fw'], selection['mol'], config['T_ads'], config['T_des'],
-                _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa, **_kw)
+                _sd_fit_types_for_sd, _sd_fits_for_sd, _x, colors, _raspa,
+                sd_vmin=_sd_vmin, sd_vmax=_sd_vmax, sd_ticks=_sd_ticks, **_kw)
 
             sd.plot_storage_density_3d_Tads_Tdes(
                 _m, selection['fw'], selection['mol'], selection['temp'], config['T_des'],
                 _sd_fit_types_for_sd, _sd_fits_for_sd,
                 config['P_ads_TT'], config['P_des_TT'], _x, colors, _raspa,
-                save_data=config.get('out_dir', False), **_kw)
+                save_data=config.get('out_dir', False),
+                sd_vmin=_sd_vmin, sd_vmax=_sd_vmax, sd_ticks=_sd_ticks, **_kw)
 
     # Optional pure-component storage density using HoA-from-file (method='data_file').
     # This reuses the CC isotherm grid but injects Qst from an external file via qst_cache_file.
@@ -1109,23 +1188,49 @@ if config['isotherm_type'] != 'mixture':
                     scale=config.get('pressure_scale', 'both'), **_hoa_kw)
 
             if _run_sd_3d:
+                # Pass 1: data-only to collect SD values for shared colorbar range.
+                _hoa_sd_raw: list = []
+                _hoa_sd_raw += sd.plot_storage_density_3d(
+                    'data_file', selection['fw'], selection['mol'], config['T_des'], _sd_fit_types_for_sd,
+                    _sd_fits_for_sd, config['P_ads'], _hoa_x, colors, _hoa_raspa,
+                    data_only=True, **_hoa_kw) or []
+                _hoa_sd_raw += sd.plot_storage_density_fixed_ads_3d(
+                    'data_file', selection['fw'], selection['mol'], config['T_ads'], config['P_ads'],
+                    config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa,
+                    data_only=True, **_hoa_kw) or []
+                _hoa_sd_raw += sd.plot_storage_density_temperature_series_3d(
+                    'data_file', selection['fw'], selection['mol'], config['T_ads'], config['T_des'],
+                    _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa,
+                    data_only=True, **_hoa_kw) or []
+                _hoa_sd_raw += sd.plot_storage_density_3d_Tads_Tdes(
+                    'data_file', selection['fw'], selection['mol'], selection['temp'], config['T_des'],
+                    _sd_fit_types_for_sd, _sd_fits_for_sd,
+                    config['P_ads_TT'], config['P_des_TT'], _hoa_x, colors, _hoa_raspa,
+                    data_only=True, **_hoa_kw) or []
+                _hoa_sd_vmin, _hoa_sd_vmax, _hoa_sd_ticks = sd._nice_colorbar_step_from_values(_hoa_sd_raw)
+
+                # Pass 2: actual plotting with shared colorbar bounds.
                 sd.plot_storage_density_3d(
                     'data_file', selection['fw'], selection['mol'], config['T_des'], _sd_fit_types_for_sd,
-                    _sd_fits_for_sd, config['P_ads'], _hoa_x, colors, _hoa_raspa, **_hoa_kw)
+                    _sd_fits_for_sd, config['P_ads'], _hoa_x, colors, _hoa_raspa,
+                    sd_vmin=_hoa_sd_vmin, sd_vmax=_hoa_sd_vmax, sd_ticks=_hoa_sd_ticks, **_hoa_kw)
 
                 sd.plot_storage_density_fixed_ads_3d(
                     'data_file', selection['fw'], selection['mol'], config['T_ads'], config['P_ads'],
-                    config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa, **_hoa_kw)
+                    config['T_des'], _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa,
+                    sd_vmin=_hoa_sd_vmin, sd_vmax=_hoa_sd_vmax, sd_ticks=_hoa_sd_ticks, **_hoa_kw)
 
                 sd.plot_storage_density_temperature_series_3d(
                     'data_file', selection['fw'], selection['mol'], config['T_ads'], config['T_des'],
-                    _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa, **_hoa_kw)
+                    _sd_fit_types_for_sd, _sd_fits_for_sd, _hoa_x, colors, _hoa_raspa,
+                    sd_vmin=_hoa_sd_vmin, sd_vmax=_hoa_sd_vmax, sd_ticks=_hoa_sd_ticks, **_hoa_kw)
 
                 sd.plot_storage_density_3d_Tads_Tdes(
                     'data_file', selection['fw'], selection['mol'], selection['temp'], config['T_des'],
                     _sd_fit_types_for_sd, _sd_fits_for_sd,
                     config['P_ads_TT'], config['P_des_TT'], _hoa_x, colors, _hoa_raspa,
-                    save_data=config.get('out_dir', False), **_hoa_kw)
+                    save_data=config.get('out_dir', False),
+                    sd_vmin=_hoa_sd_vmin, sd_vmax=_hoa_sd_vmax, sd_ticks=_hoa_sd_ticks, **_hoa_kw)
 
 def _run_mixture_storage_density_suite(mix_name, mix_fits, qst_cache, method_label='cc'):
     """Run the full set of mixture storage-density plots for a given Qst cache.
@@ -1158,23 +1263,45 @@ def _run_mixture_storage_density_suite(mix_name, mix_fits, qst_cache, method_lab
             scale=config.get('pressure_scale', 'both'), **_sd_kw)
 
     if _run_sd_3d:
+        # Pass 1: collect SD values for shared colorbar range.
+        _mix_sd_raw: list = []
+        _mix_sd_raw += sd.plot_storage_density_3d(
+            method_label, selection['fw'], [mix_name], config['T_des'], ['interp'],
+            mix_fits, config['P_ads'], x, colors, [], data_only=True, **_sd_kw) or []
+        _mix_sd_raw += sd.plot_storage_density_fixed_ads_3d(
+            method_label, selection['fw'], [mix_name], config['T_ads'], config['P_ads'],
+            config['T_des'], ['interp'], mix_fits, x, colors, [], data_only=True, **_sd_kw) or []
+        _mix_sd_raw += sd.plot_storage_density_temperature_series_3d(
+            method_label, selection['fw'], [mix_name], config['T_ads'], config['T_des'],
+            ['interp'], mix_fits, x, colors, [], data_only=True, **_sd_kw) or []
+        _mix_sd_raw += sd.plot_storage_density_3d_Tads_Tdes(
+            method_label, selection['fw'], [mix_name], selection['temp'], config['T_des'],
+            ['interp'], mix_fits,
+            config['P_ads_TT'], config['P_des_TT'], x, colors, [], data_only=True, **_sd_kw) or []
+        _mix_sd_vmin, _mix_sd_vmax, _mix_sd_ticks = sd._nice_colorbar_step_from_values(_mix_sd_raw)
+
+        # Pass 2: actual plotting with shared colorbar bounds.
         sd.plot_storage_density_3d(
             method_label, selection['fw'], [mix_name], config['T_des'], ['interp'],
-            mix_fits, config['P_ads'], x, colors, [], **_sd_kw)
+            mix_fits, config['P_ads'], x, colors, [],
+            sd_vmin=_mix_sd_vmin, sd_vmax=_mix_sd_vmax, sd_ticks=_mix_sd_ticks, **_sd_kw)
 
         sd.plot_storage_density_fixed_ads_3d(
             method_label, selection['fw'], [mix_name], config['T_ads'], config['P_ads'],
-            config['T_des'], ['interp'], mix_fits, x, colors, [], **_sd_kw)
+            config['T_des'], ['interp'], mix_fits, x, colors, [],
+            sd_vmin=_mix_sd_vmin, sd_vmax=_mix_sd_vmax, sd_ticks=_mix_sd_ticks, **_sd_kw)
 
         sd.plot_storage_density_temperature_series_3d(
             method_label, selection['fw'], [mix_name], config['T_ads'], config['T_des'],
-            ['interp'], mix_fits, x, colors, [], **_sd_kw)
+            ['interp'], mix_fits, x, colors, [],
+            sd_vmin=_mix_sd_vmin, sd_vmax=_mix_sd_vmax, sd_ticks=_mix_sd_ticks, **_sd_kw)
 
         sd.plot_storage_density_3d_Tads_Tdes(
             method_label, selection['fw'], [mix_name], selection['temp'], config['T_des'],
             ['interp'], mix_fits,
             config['P_ads_TT'], config['P_des_TT'], x, colors, [],
-            save_data=config.get('out_dir', False), **_sd_kw)
+            save_data=config.get('out_dir', False),
+            sd_vmin=_mix_sd_vmin, sd_vmax=_mix_sd_vmax, sd_ticks=_mix_sd_ticks, **_sd_kw)
 
 if (
     config['isotherm_type'] == 'mixture'
@@ -1215,7 +1342,7 @@ if (
             selected_fit_types=selection['fit_types'],
             fits_pure=_fits_from_disk,
             RASPA_data_pure=raspa_for_cc,
-            p_min=config['P_MIN'], p_max=config['P_MAX'],
+            p_min=config['P_MIN'], p_max=config['P_MAX'], P_des_max=config['P_des_max'],
             n_loadings=config['n_loadings'],
             min_temps=CC_MIN_TEMPS,
             smoothing_sigma=CC_SMOOTHING_SIGMA,
@@ -1255,7 +1382,7 @@ if (
             n_loadings=config['n_loadings'],
             min_temps=CC_MIN_TEMPS,
             smoothing_sigma=CC_SMOOTHING_SIGMA,
-            use_direct_interpolation=False,
+            use_direct_interpolation=(config['data_source'] == 'points'),
         )
         _run_mixture_storage_density_suite(_mix_name_hoa, _mix_fits_hoa, _mix_qst_hoa_cc, method_label='hoa_pure_cc')
 

@@ -204,18 +204,20 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
         
         invT = 1.0 / t_array
         min_temps_req = int(min_temps)
-        
-        # Fit ln(P) vs 1/T at each loading
+        nT = int(t_array.size)
+
+        # Fit ln(P) vs 1/T at each loading.
+        # Only accept a loading point where ALL available temperatures have valid data.
         for j in range(nL):
             y = lnP_mat[:, j]
             valid = np.isfinite(y) & np.isfinite(invT)
             n_valid = np.sum(valid)
-            if n_valid < min_temps_req:
+            if n_valid < nT:
                 continue
-            
+
             x = invT[valid]
             yy = y[valid]
-            
+
             # Linear fit ln(p) = a*(1/T) + b
             a, b = np.polyfit(x, yy, 1)
             y_fit = a * x + b
@@ -223,7 +225,7 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
             ss_tot = np.sum((yy - np.mean(yy)) ** 2)
             r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else np.nan
             r2_arr[j] = r2
-            
+
             # Standard error of slope a
             dof = int(n_valid) - 2
             if dof > 0:
@@ -232,7 +234,7 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
                 a_stderr = np.sqrt(s2 / Sxx) if (Sxx > 0 and s2 >= 0) else np.nan
             else:
                 a_stderr = np.nan
-            
+
             # Accept fit only when R^2 meets threshold
             if np.isfinite(r2) and (r2_min is None or r2 >= float(r2_min)):
                 slopes[j] = a
@@ -240,148 +242,10 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
                 Qst_kJmol[j] = -R * a / 1000.0
                 slope_stderr[j] = a_stderr
                 Qst_kJmol_stderr[j] = (R / 1000.0) * a_stderr if np.isfinite(a_stderr) else np.nan
-        
-        # Apply smoothing if requested - only at transitions where valid_counts changes
-        if smooth:
-            def _gaussian_smooth_1d_selective(arr, sigma, transition_mask):
-                """
-                Apply Gaussian smoothing only at transition points where valid_counts changes.
-                transition_mask: boolean array indicating which points are at transitions
-                """
-                a = np.array(arr, dtype=float)
-                n = a.size
-                result = a.copy()  # Start with original values
-                
-                # Only smooth at transition points
-                if not np.any(transition_mask):
-                    return result
-                
-                # For each transition point, apply local smoothing
-                x = np.arange(n)
-                nans = np.isnan(a)
-                
-                # Interpolate NaNs for smoothing calculation
-                if np.any(nans):
-                    good = ~nans
-                    if np.sum(good) >= 2:
-                        a_interp = a.copy()
-                        a_interp[nans] = np.interp(x[nans], x[good], a[good])
-                    else:
-                        return result
-                else:
-                    a_interp = a
-                
-                if sigma is None or sigma <= 0:
-                    return result
-                
-                radius = int(max(1, int(3 * float(sigma))))
-                
-                # Apply smoothing only at transition points
-                for idx in np.where(transition_mask)[0]:
-                    # Define local window around transition point
-                    start_idx = max(0, idx - radius)
-                    end_idx = min(n, idx + radius + 1)
-                    window_size = end_idx - start_idx
-                    
-                    if window_size < 2:
-                        continue
-                    
-                    # Create local kernel for this window
-                    center_offset = idx - start_idx
-                    kx = np.arange(-center_offset, window_size - center_offset)
-                    kernel = np.exp(-0.5 * (kx / float(sigma)) ** 2)
-                    kernel = kernel / np.sum(kernel)
-                    
-                    # Extract local window
-                    window = a_interp[start_idx:end_idx]
-                    
-                    # Apply convolution
-                    if window_size > 1:
-                        smoothed_val = np.sum(window * kernel)
-                        result[idx] = smoothed_val
-                
-                # Restore NaNs where original was NaN
-                result[nans] = np.nan
-                return result
-            
-            try:
-                sigma = float(smoothing_sigma)
-            except Exception:
-                sigma = 1.5
-            
-            slopes_arr = np.array(slopes, dtype=float)
-            finite_mask = np.isfinite(slopes_arr)
-            
-            # Identify transition points where valid_counts changes
-            try:
-                vc = np.asarray(valid_counts, dtype=float)
-                # Exclude points with insufficient temperatures
-                sufficient_temps_mask = vc >= min_temps_req
-                
-                # Find transitions: points where valid_counts changes
-                transition_mask = np.zeros(len(vc), dtype=bool)
-                if len(vc) > 1:
-                    # Check for changes in valid_counts
-                    vc_diff = np.diff(vc)
-                    # Mark points at transitions (both the point before and after the change)
-                    transition_indices = np.where(vc_diff != 0)[0]
-                    for trans_idx in transition_indices:
-                        if trans_idx < len(transition_mask):
-                            transition_mask[trans_idx] = True
-                        if trans_idx + 1 < len(transition_mask):
-                            transition_mask[trans_idx + 1] = True
-                
-                # Only smooth at transitions AND where we have sufficient temperatures
-                smooth_mask = transition_mask & sufficient_temps_mask & finite_mask
-            except Exception:
-                # Fallback: no smoothing if we can't determine transitions
-                smooth_mask = np.zeros(len(slopes_arr), dtype=bool)
-            
-            if np.sum(finite_mask) >= 2:
-                if np.any(smooth_mask):
-                    # There are transition points - apply selective smoothing
-                    slopes_sm = _gaussian_smooth_1d_selective(slopes_arr, sigma, smooth_mask)
-                    slopes_sm[~finite_mask] = np.nan
-                    # Also exclude points with insufficient temperatures
-                    try:
-                        vc = np.asarray(valid_counts, dtype=float)
-                        slopes_sm[vc < min_temps_req] = np.nan
-                    except Exception:
-                        pass
-                else:
-                    # No transition points - smoothed data is same as original (smoothing not needed)
-                    slopes_sm = slopes_arr.copy()
-                    slopes_sm[~finite_mask] = np.nan
-                    # Also exclude points with insufficient temperatures
-                    try:
-                        vc = np.asarray(valid_counts, dtype=float)
-                        slopes_sm[vc < min_temps_req] = np.nan
-                    except Exception:
-                        pass
-                
-                Qst_kJmol_smoothed = -R * slopes_sm / 1000.0
-                slope_stderr_arr = np.array(slope_stderr, dtype=float)
-                if np.any(np.isfinite(slope_stderr_arr)):
-                    if np.any(smooth_mask):
-                        # There are transition points - apply selective smoothing
-                        slope_stderr_sm = _gaussian_smooth_1d_selective(slope_stderr_arr, sigma, smooth_mask)
-                    else:
-                        # No transition points - smoothed stderr is same as original
-                        slope_stderr_sm = slope_stderr_arr.copy()
-                    slope_stderr_sm[~np.isfinite(slope_stderr_arr)] = np.nan
-                    # Exclude points with insufficient temperatures
-                    try:
-                        vc = np.asarray(valid_counts, dtype=float)
-                        slope_stderr_sm[vc < min_temps_req] = np.nan
-                    except Exception:
-                        pass
-                    Qst_kJmol_stderr_smoothed = (R / 1000.0) * slope_stderr_sm
-                else:
-                    Qst_kJmol_stderr_smoothed = np.full_like(Qst_kJmol_smoothed, np.nan)
-            else:
-                Qst_kJmol_smoothed = None
-                Qst_kJmol_stderr_smoothed = None
-        
+
+        Qst_kJmol_smoothed = None
+        Qst_kJmol_stderr_smoothed = None
+
         return {
             'loading': loadings,
             'Qst_kJmol': Qst_kJmol,
@@ -523,16 +387,15 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
     Qst_kJmol_stderr = np.full(nL, np.nan)
 
     invT = 1.0 / t_array
-
-    # determine minimum number of temperatures required for regression:
-    # use the user-specified `min_temps` directly (caller controls the threshold)
     min_temps_req = int(min_temps)
 
+    # Fit ln(P) vs 1/T at each loading.
+    # Only accept a loading point where ALL available temperatures have valid data.
     for j in range(nL):
         y = lnP_mat[:, j]
         valid = np.isfinite(y) & np.isfinite(invT)
         n_valid = np.sum(valid)
-        if n_valid < min_temps_req:
+        if n_valid < nT:
             continue
 
         x = invT[valid]
@@ -563,147 +426,10 @@ def compute_isosteric_heat(framework, molecule, temperatures, selected_fit_types
             slope_stderr[j] = a_stderr
             Qst_kJmol_stderr[j] = (R / 1000.0) * a_stderr if np.isfinite(a_stderr) else np.nan
         else:
-            # leave NaN if rejected
             continue
 
-    # Optionally smooth by applying a Gaussian filter to the regression
-    # slopes `a`, then converting back to Qst=-R*a/1000. This preserves the
-    # physical relation and avoids smoothing across unsupported points.
-    # Smoothing only occurs at transitions where valid_counts changes.
-    if smooth:
-        def _gaussian_smooth_1d_selective(arr, sigma, transition_mask):
-            """
-            Apply Gaussian smoothing only at transition points where valid_counts changes.
-            transition_mask: boolean array indicating which points are at transitions
-            """
-            a = np.array(arr, dtype=float)
-            n = a.size
-            result = a.copy()  # Start with original values
-            
-            # Only smooth at transition points
-            if not np.any(transition_mask):
-                return result
-            
-            # For each transition point, apply local smoothing
-            x = np.arange(n)
-            nans = np.isnan(a)
-            
-            # Interpolate NaNs for smoothing calculation
-            if np.any(nans):
-                good = ~nans
-                if np.sum(good) >= 2:
-                    a_interp = a.copy()
-                    a_interp[nans] = np.interp(x[nans], x[good], a[good])
-                else:
-                    return result
-            else:
-                a_interp = a
-            
-            if sigma is None or sigma <= 0:
-                return result
-            
-            radius = int(max(1, int(3 * float(sigma))))
-            
-            # Apply smoothing only at transition points
-            for idx in np.where(transition_mask)[0]:
-                # Define local window around transition point
-                start_idx = max(0, idx - radius)
-                end_idx = min(n, idx + radius + 1)
-                window_size = end_idx - start_idx
-                
-                if window_size < 2:
-                    continue
-                
-                # Create local kernel for this window
-                center_offset = idx - start_idx
-                kx = np.arange(-center_offset, window_size - center_offset)
-                kernel = np.exp(-0.5 * (kx / float(sigma)) ** 2)
-                kernel = kernel / np.sum(kernel)
-                
-                # Extract local window
-                window = a_interp[start_idx:end_idx]
-                
-                # Apply convolution
-                if window_size > 1:
-                    smoothed_val = np.sum(window * kernel)
-                    result[idx] = smoothed_val
-            
-            # Restore NaNs where original was NaN
-            result[nans] = np.nan
-            return result
-
-        try:
-            sigma = float(smoothing_sigma)
-        except Exception:
-            sigma = 1.5
-
-        slopes_arr = np.array(slopes, dtype=float)
-        finite_mask = np.isfinite(slopes_arr)
-        
-        # Identify transition points where valid_counts changes
-        try:
-            vc = np.asarray(valid_counts, dtype=float)
-            # Exclude points with insufficient temperatures
-            sufficient_temps_mask = vc >= min_temps_req
-            
-            # Find transitions: points where valid_counts changes
-            transition_mask = np.zeros(len(vc), dtype=bool)
-            if len(vc) > 1:
-                # Check for changes in valid_counts
-                vc_diff = np.diff(vc)
-                # Mark points at transitions (both the point before and after the change)
-                transition_indices = np.where(vc_diff != 0)[0]
-                for trans_idx in transition_indices:
-                    if trans_idx < len(transition_mask):
-                        transition_mask[trans_idx] = True
-                    if trans_idx + 1 < len(transition_mask):
-                        transition_mask[trans_idx + 1] = True
-            
-            # Only smooth at transitions AND where we have sufficient temperatures
-            smooth_mask = transition_mask & sufficient_temps_mask & finite_mask
-        except Exception:
-            # Fallback: no smoothing if we can't determine transitions
-            smooth_mask = np.zeros(len(slopes_arr), dtype=bool)
-        
-        if np.sum(finite_mask) >= 2:
-            if np.any(smooth_mask):
-                # There are transition points - apply selective smoothing
-                slopes_sm = _gaussian_smooth_1d_selective(slopes_arr, sigma, smooth_mask)
-            else:
-                # No transition points - smoothed data is same as original (smoothing not needed)
-                slopes_sm = slopes_arr.copy()
-            # restore NaNs where original slopes were NaN
-            slopes_sm[~finite_mask] = np.nan
-            # mask by valid_counts threshold
-            try:
-                vc = np.asarray(valid_counts, dtype=float)
-                slopes_sm[vc < min_temps_req] = np.nan
-            except Exception:
-                pass
-
-            Qst_kJmol_smoothed = -R * slopes_sm / 1000.0
-            # smooth slope stderr if available
-            slope_stderr_arr = np.array(slope_stderr, dtype=float)
-            if np.any(np.isfinite(slope_stderr_arr)):
-                if np.any(smooth_mask):
-                    # There are transition points - apply selective smoothing
-                    slope_stderr_sm = _gaussian_smooth_1d_selective(slope_stderr_arr, sigma, smooth_mask)
-                else:
-                    # No transition points - smoothed stderr is same as original
-                    slope_stderr_sm = slope_stderr_arr.copy()
-                slope_stderr_sm[~np.isfinite(slope_stderr_arr)] = np.nan
-                # Exclude points with insufficient temperatures
-                try:
-                    vc = np.asarray(valid_counts, dtype=float)
-                    slope_stderr_sm[vc < min_temps_req] = np.nan
-                except Exception:
-                    pass
-                Qst_kJmol_stderr_smoothed = (R / 1000.0) * slope_stderr_sm
-            else:
-                Qst_kJmol_stderr_smoothed = np.full_like(Qst_kJmol_smoothed, np.nan)
-        else:
-            Qst_kJmol_smoothed = None
-            Qst_kJmol_stderr_smoothed = None
+    Qst_kJmol_smoothed = None
+    Qst_kJmol_stderr_smoothed = None
 
     return {
         'loading': loadings,
@@ -843,15 +569,25 @@ def plot_clausius_clapeyron(selected_frameworks, selected_molecules, temperature
                 # if smoothed data is available and requested, use that; otherwise use raw Qst.
                 Qst_sm = data.get('Qst_kJmol_smoothed')
                 use_smoothed = plot_smoothed and Qst_sm is not None
-                # Keep HoA color mapping consistent across original and smoothed curves.
-                cc_color = phelp.get_color_for_molecule(mol)
 
-                if show_original:
-                    # HoA rule: color encodes adsorbate (molecule), linestyle encodes method
-                    cc_ls = phelp.get_hoa_linestyle(
+                # Color/linestyle scheme:
+                #   single adsorbate + multiple adsorbents → color encodes framework, solid line
+                #   otherwise                              → color encodes molecule, linestyle encodes framework
+                _color_by_fw = (len(selected_molecules or []) == 1 and len(selected_frameworks or []) > 1)
+                if _color_by_fw:
+                    cc_color = phelp.get_color_for_structure(fw)
+                    cc_ls    = '-'
+                else:
+                    cc_color = phelp.get_color_for_molecule(mol)
+                    cc_ls    = phelp.get_hoa_linestyle(
                         fw, 'clausius_clapeyron', 'structure', method_linestyles=method_linestyles
                     )
-                    marker = phelp.get_marker_for_molecule(mol) if len(selected_molecules or []) > 1 else 'o'
+
+                if show_original or not use_smoothed:
+                    # HoA rule: color/linestyle already set above
+                    # Only show per-point markers when explicitly showing the original
+                    # curve; in fallback mode (no smoothed data) draw a clean line.
+                    marker = (phelp.get_marker_for_molecule(mol) if len(selected_molecules or []) > 1 else 'o') if show_original else ''
                     orig_line, = ax.plot(
                         loading[mask], Qst[mask],
                         marker=marker, linestyle=cc_ls, label="_nolegend_",
@@ -981,7 +717,7 @@ def plot_clausius_clapeyron(selected_frameworks, selected_molecules, temperature
                             if pts:
                                 loads = np.array([p['loading'] for p in pts], dtype=float)
                                 enths = np.array([p['enthalpy'] for p in pts], dtype=float)
-                                ax.scatter(loads, enths, marker='.', color='k', s=phelp.AXIS_S_SIZE, alpha=phelp.ALPHA, label=f"RASPA H: {fw},{mol}")
+                                ax.scatter(loads, enths, marker='.', color='k', s=phelp.AXIS_S_SIZE, alpha=phelp.ALPHA, label=f"RASPA H: {phelp.clean_material_name(fw)},{phelp.get_molecule_display_name(mol)}")
 
         if not any_plotted:
             print("Clausius-Clapeyron: nothing plotted (no valid fits)")
@@ -1005,6 +741,7 @@ def plot_clausius_clapeyron(selected_frameworks, selected_molecules, temperature
         ax.grid(True, which='both', ls='--', alpha=phelp.ALPHA_GRID)
 
         # ax.set_title('Clausius-Clapeyron')
+        _legend_color_by_fw = (len(selected_molecules or []) == 1 and len(selected_frameworks or []) > 1)
         phelp.build_hoa_proxy_legend(
             ax,
             molecules_present=selected_molecules,
@@ -1013,6 +750,7 @@ def plot_clausius_clapeyron(selected_frameworks, selected_molecules, temperature
             method_linestyles=method_linestyles,
             fontsize=phelp.AXIS_LEGEND_SIZE,
             loc='best',
+            color_by_framework=_legend_color_by_fw,
         )
     phelp.apply_unified_axes_layout(fig, ax)
     # Use plot_suffix to distinguish between different versions of the plot
@@ -1624,11 +1362,22 @@ def _save_mix_hoa_rows_to_run_folder(rows, fw, mixture_name, selected_temperatur
         mix_part = _safe_join_mix([mixture_name])
         temp_part = _safe_join_mix(selected_temperatures)
 
-        run_folder_name = f"{fw_part}_{mix_part}_{temp_part}"
+        run_folder_name = phelp._resolve_run_folder(plots_root, f"{fw_part}_{mix_part}_{temp_part}")
         saved_dir = plots_root / run_folder_name / 'Heat_of_Adsorption' / 'saved'
-        saved_dir.mkdir(parents=True, exist_ok=True)
 
+        # Build the full path first so we can check its length before creating any directories.
         data_path = saved_dir / f"{prefix}.txt"
+        _MAX_WIN_PATH = 260
+        if len(str(data_path)) > _MAX_WIN_PATH:
+            print(
+                f"\nWarning: mixture HOA data path is {len(str(data_path))} characters, "
+                f"which exceeds the Windows MAX_PATH limit of {_MAX_WIN_PATH}.\n"
+                f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+                f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py.\n"
+            )
+            return
+
+        saved_dir.mkdir(parents=True, exist_ok=True)
         with data_path.open('w', encoding='utf-8') as f:
             f.write("framework\tmolecule\ttemperature_K\tloading_mol_per_kg\tQst_kJmol\n")
             for r in rows:
@@ -1637,7 +1386,11 @@ def _save_mix_hoa_rows_to_run_folder(rows, fw, mixture_name, selected_temperatur
                     f"{r['loading']}\t{r['Qst_kJmol']}\n"
                 )
     except Exception as e:
-        print(f"Warning: failed to write mixture HOA data file: {e}")
+        print(
+            f"Warning: failed to write mixture HOA data file: {e}\n"
+            f"  This is a path-length error. Lower MAX_RUN_FOLDER_LEN "
+            f"(currently {phelp.MAX_RUN_FOLDER_LEN}) in Code/functions/PlotHelpers.py."
+        )
 
 
 # Mixture / pure HOA figures from ``_plot_hoa_mix``: y-span (kJ/mol) and tick step.
@@ -1806,24 +1559,43 @@ def _plot_hoa_mix(fw, components, qst_interp, pure_curves,
             if n_sum <= 0:
                 continue
 
-            # Strict rule: only accept a mixture point if every component has
-            # finite interpolated Qst at its computed n_i.
             n_i_by_comp = {comp: n_i for comp, n_i in n_i_vals}
             if any(comp not in n_i_by_comp for comp in components):
                 continue
             if any(comp not in qst_interp for comp in components):
                 continue
 
-            qst_j = 0.0
-            all_finite = True
+            # Evaluate pure Qst per component.  If n_i falls outside one
+            # component's valid range (returns NaN) clamp it to the nearest
+            # endpoint of that interpolator.  Two or more missing → skip.
+            qst_vals = {}
+            missing_count = 0
+            _skip = False
             for comp in components:
                 qv = float(qst_interp[comp](n_i_by_comp[comp]))
                 if not np.isfinite(qv):
-                    all_finite = False
-                    break
-                qst_j += (n_i_by_comp[comp] / n_sum) * qv
+                    interp_c = qst_interp[comp]
+                    n_clamp  = (float(interp_c.x[0])
+                                if n_i_by_comp[comp] < float(interp_c.x[0])
+                                else float(interp_c.x[-1]))
+                    qv_ep = float(interp_c(n_clamp))
+                    if np.isfinite(qv_ep):
+                        qst_vals[comp] = qv_ep
+                        missing_count += 1
+                    else:
+                        _skip = True
+                        break
+                else:
+                    qst_vals[comp] = qv
 
-            if all_finite and np.isfinite(qst_j):
+            if _skip or missing_count > 1 or len(qst_vals) < len(components):
+                continue
+
+            qst_j = sum(
+                (n_i_by_comp[comp] / n_sum) * qv
+                for comp, qv in qst_vals.items()
+            )
+            if np.isfinite(qst_j):
                 Qst_mix[j] = qst_j
 
         valid = np.isfinite(Qst_mix)
@@ -1960,13 +1732,15 @@ def plot_mixture_heat_hoa_pure_cc(
         selected_frameworks, mixture_name, selected_temperatures,
         selected_fit_types, p_min, p_max,
         n_loadings=50, min_temps=3, smoothing_sigma=None,
-        combo_colors=None, out_dir=None, save_data=False, **_ignored):
+        combo_colors=None, out_dir=None, save_data=False,
+        use_direct_interpolation=False, **_ignored):
     """
     Mixture HOA via weighted pure CC Qst:
         Qst_mix(n_tot) = sum_i  y_i * Qst_i^CC(n_i)
     Pure Qst computed with Clausius-Clapeyron (compute_isosteric_heat).
 
-    Always uses fitting values (use_direct_interpolation=False).  The loading
+    Uses either fit inversion (default) or direct interpolation from points
+    (when ``use_direct_interpolation=True``). The loading
     range for each component is derived from RASPA_data_pure via
     ``_intersection_loading_range`` — the same logic as the pure-component CC
     HOA plot.  Pass a DataSelection-built dataset (one built with the
@@ -1979,7 +1753,7 @@ def plot_mixture_heat_hoa_pure_cc(
     if not mixture_data:
         print("plot_mixture_heat_hoa_pure_cc: no mixture data, skipping.")
         return
-    if not fits_pure:
+    if (not use_direct_interpolation) and (not fits_pure):
         print("plot_mixture_heat_hoa_pure_cc: no pure-component fits available; skipping.")
         return
 
@@ -2008,7 +1782,7 @@ def plot_mixture_heat_hoa_pure_cc(
                     p_min=p_min, p_max=p_max,
                     min_temps=min_temps,
                     smooth=True, smoothing_sigma=smoothing_sigma,
-                    use_direct_interpolation=False,
+                    use_direct_interpolation=use_direct_interpolation,
                 )
             except Exception as e:
                 print(f"plot_mixture_heat_hoa_pure_cc: CC failed for {fw}/{comp}: {e}")
