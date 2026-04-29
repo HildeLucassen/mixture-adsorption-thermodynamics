@@ -22,7 +22,7 @@ relative path (relative to `Data_formatting/`).
 C:\Users\you\simulations\my_run\
 
 # Relative path example (relative to Data_formatting/):
-Example/Data
+Data
 ```
 
 Lines starting with `#` are ignored.  If the file is missing or empty the tool
