@@ -6,6 +6,27 @@ The pipeline for the code, as described in the figure below
 
 ![Workflow](Workflow.png)
 
+### Data source options
+
+The workflow can read adsorption data in two ways (`DATA_SOURCE` in `config.in`):
+
+- **`fitting`**: use parameter tables (for isotherm-model based calculations).
+- **`points`**: use raw pressure-loading points directly.
+
+If `DATA_SOURCE` is not explicitly set or the fitting file is unavailable, the
+code can fall back to points-based input (depending on the run configuration).
+
+### Format templates
+
+Example input-format files are available in **`template/Input/`** (e.g.
+`data_points.txt`, `data_heat_of_adsorption.txt`, and related files). Use these
+as the reference column structure when preparing your own datasets.
+
+### Converting non-matching raw files
+
+If your raw data files are not yet in the required format, use the
+**`Data_formatting/`** tool.
+
 ##  Configuration
 
 | File | Role |
@@ -69,31 +90,6 @@ Place (or point `config.in` to) text files under **`Input/`**, for example:
 - Optional dedicated **heat-of-adsorption** tables when using file-based HOA modes.
 
 Formats are defined by the reader logic in `Code/Input.py` and the rest of the pipeline; keep column layouts consistent with your existing example files.
-
-### Data source options
-
-The workflow can read adsorption data in two ways (`DATA_SOURCE` in `config.in`):
-
-- **`fitting`**: use parameter tables (for isotherm-model based calculations).
-- **`points`**: use raw pressure-loading points directly.
-
-If `DATA_SOURCE` is not explicitly set or the fitting file is unavailable, the
-code can fall back to points-based input (depending on the run configuration).
-
-### Format templates
-
-Example input-format files are available in **`template/Input/`** (e.g.
-`data_points.txt`, `data_heat_of_adsorption.txt`, and related files). Use these
-as the reference column structure when preparing your own datasets.
-
-### Converting non-matching raw files
-
-If your raw data files are not yet in the required format, use the
-**`Data_formatting/`** utility:
-
-- set your source folder in `Data_formatting/input_data_dir.txt`
-- run `python Data_formatting/run.py`
-- copy the generated outputs from `Data_formatting/Output/` into your run `Input/` folder
 
 ## Outputs
 
