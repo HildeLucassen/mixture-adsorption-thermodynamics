@@ -42,8 +42,8 @@ each file, and asks a short series of questions to map the columns.
 Formatted rows are appended to:
 
 ```
-Data_formatting/Example/Output/data_points.txt
-Data_formatting/Example/Output/data_heat_of_adsorption.txt
+Data_formatting/Output/data_points.txt
+Data_formatting/Output/data_heat_of_adsorption.txt
 ```
 
 Copy these files into the `Input/` folder of your pipeline example to use them.
