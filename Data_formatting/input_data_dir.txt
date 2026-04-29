@@ -1,0 +1,3 @@
+# Input data folder for Data_formatting/Code/formatting_tool.py
+# You can use either an absolute path or a path relative to Data_formatting/.
+Data

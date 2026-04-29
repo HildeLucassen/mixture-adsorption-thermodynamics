@@ -1,0 +1,1 @@
+Structure	Molecule	Mixture/Pure	Temperature	Pressure	Loading mol/kg

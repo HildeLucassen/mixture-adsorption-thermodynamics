@@ -1,0 +1,2 @@
+#Structure 	Molecule     Loading (mol/kg)    Heat of Adsorption (kJ/mol)
+ADSORBENT   ADSORTBATE   xxxx                xxxx
