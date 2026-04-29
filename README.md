@@ -6,7 +6,7 @@ The pipeline for the code, as described in the figure below
 
 ![Workflow](Workflow.png)
 
-### Data source options
+## Data source options
 
 The workflow can read adsorption data in two ways (`DATA_SOURCE` in `config.in`):
 
@@ -15,6 +15,9 @@ The workflow can read adsorption data in two ways (`DATA_SOURCE` in `config.in`)
 
 If `DATA_SOURCE` is not explicitly set or the fitting file is unavailable, the
 code can fall back to points-based input (depending on the run configuration).
+
+The workflow can also include previously determine the heat of adsorption:
+-  **`HoA`**: heat of adosrption, datafile 
 
 ### Format templates
 
