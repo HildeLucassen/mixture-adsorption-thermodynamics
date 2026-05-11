@@ -367,6 +367,22 @@ config = {
     'hoa_legend_file': str(read_input_file.get('HOA_LEGEND_FILE') or 'Data').strip(),
 }
 
+# ---------------------------------------------------------------------------
+# Pressure units: numeric bounds default to the user's PRESSURE_UNIT (Pa | kPa);
+# everything below stays in SI Pa for the pipeline.
+# ---------------------------------------------------------------------------
+_functions_dir = Path(__file__).resolve().parent / 'functions'
+if str(_functions_dir) not in sys.path:
+    sys.path.insert(0, str(_functions_dir))
+from Initialize import pressure_input_is_kpa  # noqa: E402
+
+_PRESSURE_BOUND_KEYS_SCALE_WITH_UNIT = (
+    'P_MIN', 'P_MAX', 'P_MIN_SD', 'P_des_max', 'P_ads_TT', 'P_des_TT', 'P_ads',
+)
+if pressure_input_is_kpa(selection['pressure_unit']):
+    for _pk in _PRESSURE_BOUND_KEYS_SCALE_WITH_UNIT:
+        config[_pk] = float(config[_pk]) * 1000.0
+
 _DESIGN_DEFAULTS = {
     # When these mappings are empty, PlotHelpers will assign styles/markers
     # automatically from its internal palettes, purely based on ordering of
@@ -400,10 +416,6 @@ _DESIGN_DEFAULTS = {
 }
 
 _design = {**_DESIGN_DEFAULTS, **_load_design_in(_repo_root / 'design.in')}
-
-_functions_dir = Path(__file__).resolve().parent / 'functions'
-if str(_functions_dir) not in sys.path:
-    sys.path.insert(0, str(_functions_dir))
 
 import PlotHelpers as _ph_sd3d
 _SD3D = _ph_sd3d.STORAGE_DENSITY_3D_DEFAULTS

@@ -126,18 +126,23 @@ if config['data_source'] == 'fitting':
     # When using fitting-derived isotherms, still optionally show RASPA
     # points (scatter) if the user enabled it.
     if config.get('show_points', True) and _points_file:
-        data_points = init.load_RASPA_data(str(_points_file), pure_only=True)
+        data_points = init.load_RASPA_data(
+            str(_points_file), pure_only=True, pressure_unit=selection['pressure_unit'])
     else:
         data_points = []
 else:  # 'points'
     fits = []
-    data_points = init.load_RASPA_data(str(_points_file), pure_only=True) if _points_file else []
+    data_points = (
+        init.load_RASPA_data(
+            str(_points_file), pure_only=True, pressure_unit=selection['pressure_unit'])
+        if _points_file else [])
 
 # Full RASPA table (pure + mixture rows) for autodetection and mixture filtering.
 _raspa_full = []
 if _points_file:
     try:
-        _raspa_full = init.load_RASPA_data(str(_points_file), pure_only=False)
+        _raspa_full = init.load_RASPA_data(
+            str(_points_file), pure_only=False, pressure_unit=selection['pressure_unit'])
     except Exception as e:
         print(f"Warning: could not load RASPA points file for mixture/autodetect: {e}")
 
@@ -234,7 +239,8 @@ if (
         _mixture_use_points_fallback = True
         if _points_file and not data_points:
             try:
-                data_points = init.load_RASPA_data(str(_points_file), pure_only=True)
+                data_points = init.load_RASPA_data(
+                    str(_points_file), pure_only=True, pressure_unit=selection['pressure_unit'])
             except Exception as _e_pf:
                 print(f"Warning: RASPA points load for mixture fallback failed: {_e_pf}")
 
@@ -578,6 +584,9 @@ else:
 # Works for both data_source modes: 'fitting' (data_points_calc = synthetic points from
 # synthesize_points_from_fittings) and 'points' (data_points_calc = raw RASPA data).
 # DataSelection applies PCHIP re-gridding, p-bounds, and the min_temps coverage constraint.
+# RASPA pressures are converted kPa→Pa inside load_RASPA_data when PRESSURE_UNIT requires it;
+# do not multiply again here.
+_dataset_scale_kpa_pressure = False
 data_points_virial = data_points_calc
 raspa_for_cc = data_points_calc
 _sd_m = str(Input.plot_flags.get('Storage_Density_Method', '') or '').lower()
@@ -596,6 +605,7 @@ if _want_dataset:
             n_loadings=config['n_loadings'],
             p_min=config['P_MIN'], p_max=config['P_MAX'],
             min_temps=CC_MIN_TEMPS,
+            scale_kpa_pressure_to_pa=_dataset_scale_kpa_pressure,
         )
         if _rows:
             data_points_virial = _rows
@@ -666,6 +676,7 @@ if (
                     n_loadings=config['n_loadings'],
                     p_min=config['P_MIN'], p_max=config['P_MAX'],
                     min_temps=CC_MIN_TEMPS,
+                    scale_kpa_pressure_to_pa=_dataset_scale_kpa_pressure,
                 )
                 _cmp_rows_all.extend(_comp_ds or [])
             if _cmp_rows_all:
@@ -704,6 +715,7 @@ if (
                         p_min=config['P_MIN'],
                         p_max=config['P_MAX'],
                         min_temps=CC_MIN_TEMPS,
+                        scale_kpa_pressure_to_pa=False,
                     )
                     if _cmp_ds:
                         raspa_pure_mixture_components = _cmp_ds

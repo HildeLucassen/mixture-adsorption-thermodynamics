@@ -15,9 +15,7 @@ ClausiusClapeyron apply different outlier criteria.
 
 Public API
 ----------
-build_dataset(input_rows, selected_frameworks, selected_molecules,
-              selected_temperatures, n_loadings, p_min, p_max, min_temps=3)
-    -> list[dict]
+build_dataset(..., scale_kpa_pressure_to_pa=False)
 
 save_dataset(rows, filepath)
 """
@@ -27,6 +25,24 @@ from pathlib import Path
 from scipy.interpolate import PchipInterpolator
 import PlotHelpers as phelp
 
+
+def _scale_pressure_column_kpa_to_pa(rows):
+    """Copy rows with numeric ``pressure`` multiplied by 1000 (kPa_file → Pa).
+
+    Prefer converting in :func:`load_RASPA_data` so all RASPA-derived lists are Pa.
+    This helper remains for callers that build row dicts without that loader.
+    """
+    out = []
+    for r in rows:
+        rr = dict(r)
+        pv = rr.get('pressure')
+        if pv is not None:
+            try:
+                rr['pressure'] = float(pv) * 1000.0
+            except (TypeError, ValueError):
+                pass
+        out.append(rr)
+    return out
 
 # ---------------------------------------------------------------------------
 # Private helpers
@@ -341,7 +357,8 @@ def _flatten_to_rows(framework, molecule, temps_with_data, loadings, P_mat):
 # ---------------------------------------------------------------------------
 
 def build_dataset(input_rows, selected_frameworks, selected_molecules,
-                  selected_temperatures, n_loadings, p_min, p_max, min_temps=3):
+                  selected_temperatures, n_loadings, p_min, p_max, min_temps=3,
+                  scale_kpa_pressure_to_pa=False):
     """Build the shared dataset for Virial and ClausiusClapeyron.
 
     Parameters
@@ -349,7 +366,7 @@ def build_dataset(input_rows, selected_frameworks, selected_molecules,
     input_rows : list[dict]
         Raw RASPA data **or** synthetic points from
         ``IsothermFittingPlot.synthesize_points_from_fittings``.
-        Both modes are handled identically.
+        Both modes are handled identically after optional kPa scaling.
     selected_frameworks, selected_molecules, selected_temperatures :
         Selections to process.
     n_loadings : int
@@ -359,6 +376,9 @@ def build_dataset(input_rows, selected_frameworks, selected_molecules,
     min_temps : int
         Minimum number of temperatures that must have pressure coverage
         in [p_min, p_max] for a loading value to be included.
+    scale_kpa_pressure_to_pa : bool
+        If True (typically ``DATA_SOURCE=points`` and ``PRESSURE_UNIT`` is kPa),
+        multiply each row's ``pressure`` by 1000 before interpolation.
 
     Returns
     -------
@@ -369,6 +389,9 @@ def build_dataset(input_rows, selected_frameworks, selected_molecules,
     if (not input_rows or not selected_frameworks
             or not selected_molecules or not selected_temperatures):
         return []
+
+    if scale_kpa_pressure_to_pa:
+        input_rows = _scale_pressure_column_kpa_to_pa(input_rows)
 
     p_min_bound = max(float(p_min), 1e-8)
     p_max_bound = float(p_max)

@@ -10,7 +10,7 @@ PRESSURE_UNIT           Pa
 PRESSURE_SCALE          log                     # or linear or both
 
 # ---- Input data ----
-DATA_FILE_FITTING       Input\data_parameters.txt   # isotherm fitting parameters (used when DATA_SOURCE=fitting)
+DATA_FILE_FITTING       Input/data_parameters.txt   # isotherm fitting parameters (used when DATA_SOURCE=fitting)
 DATA_SOURCE             fitting                                     # 'fitting' or 'points'
 
 # ---- What to compute / plot ----

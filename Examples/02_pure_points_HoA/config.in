@@ -4,8 +4,8 @@ ADSORBATE               R125                   # space/comma-separated list; e.g
 TEMPERATURE             [283,303,333,353]           # K; leave blank to auto-select from fittings
 FIT_TYPE                Sips                    # space/comma-separated list; e.g. Sips, Toth, Langmuir-Freundlich
 NUM_ISOTHERM_SITES      2
-P_MIN                   100                     # Pa
-P_MAX                   3e06                    # Pa
+P_MIN                   100                     # 
+P_MAX                   3e6                     # 
 PRESSURE_UNIT           Pa
 PRESSURE_SCALE          log                     # or linear or both
 

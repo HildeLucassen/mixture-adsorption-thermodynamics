@@ -1,2 +1,15 @@
-#Structure 	Molecule     Loading (mol/kg)    Heat of Adsorption (kJ/mol)
-ADSORBENT   ADSORTBATE   xxxx                xxxx
+#Structure	Molecule	Loading [mol/kg]	Heat of Adsorption [kJ/mol]
+Bhatia_03	R32	0.0	nan
+Bhatia_03	R32	0.0	-14.89557
+Bhatia_03	R32	0.0001	-15.50836
+Bhatia_03	R32	0.0002	-13.80955
+Bhatia_03	R32	0.0005	-14.25488
+Bhatia_03	R32	0.0017	-14.23889
+Bhatia_03	R32	0.0054	-14.18043
+Bhatia_03	R32	0.0164	-14.24412
+Bhatia_03	R32	0.055	-14.37701
+Bhatia_03	R32	0.1634	-14.32907
+Bhatia_03	R32	0.5128	-14.45852
+Bhatia_03	R32	1.3044	-14.1291
+Bhatia_03	R32	3.1706	-13.69836
+Bhatia_03	R32	6.1854	-17.1117

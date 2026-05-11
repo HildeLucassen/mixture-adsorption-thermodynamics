@@ -1,1 +1,15 @@
-Structure	Molecule	Mixture/Pure	Temperature	Pressure	Loading mol/kg
+Structure	Molecule	Mixture/Pure	Temperature [K]	Pressure [Pa]	Loading [mol/kg]
+Bhatia_03	R32	pure	333	1.0	0.0
+Bhatia_03	R32	pure	333	3.0	0.0
+Bhatia_03	R32	pure	333	10.0	0.0001
+Bhatia_03	R32	pure	333	30.0	0.0002
+Bhatia_03	R32	pure	333	100.0	0.0005
+Bhatia_03	R32	pure	333	300.0	0.0017
+Bhatia_03	R32	pure	333	1000.0	0.0054
+Bhatia_03	R32	pure	333	3000.0	0.0164
+Bhatia_03	R32	pure	333	10000.0	0.055
+Bhatia_03	R32	pure	333	30000.0	0.1634
+Bhatia_03	R32	pure	333	100000.0	0.5128
+Bhatia_03	R32	pure	333	300000.0	1.3044
+Bhatia_03	R32	pure	333	1000000.0	3.1706
+Bhatia_03	R32	pure	333	3000000.0	6.1854

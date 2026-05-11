@@ -19,13 +19,76 @@ def get_pipeline_run_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 #Data loading
-def load_fitting_data(filepath, pressure_unit='kPa'):
+
+def pressure_input_is_kpa(pressure_unit: str | None) -> bool:
+    """True when config / user indicates pressures in fittings or point files are in kPa."""
+    if pressure_unit is None:
+        return False
+    s = str(pressure_unit).strip().lower().replace(" ", "")
+    if not s:
+        return False
+    if s == "pa" or "pascal" in s:
+        return False
+    return s.startswith("kpa") or "kilopascal" in s
+
+
+def convert_fitting_params_kpa_pressure_to_pa(params: list[float], fit_type: str) -> list[float]:
+    """Convert isotherm parameters from kPa-based pressure affinity to Pa-based (in-place semantics on a copy).
+
+    Conventions (RASPA-like ``fit_type``):
+    - Langmuir-Freundlich / multi-site: triples ``(q_s, K_or_b, n)`` … divide affinity ``K`` by 1000 per site (dual-site = two triples).
+
+    - Sips triples ``(q, K, m)``: ``K_Pa = K_kPa / 1000**m``.
+
+    - Tóth triples ``(q_s, b, t)``: divide ``b`` by 1000 per site.
+
+    Unknown / other types: apply the LF-style affinity scaling (middle of each triple) when ``len(params) >= 3`` and ``len % 3 == 0``.
+    """
+    ft = str(fit_type).replace("fitting_", "").replace("_", "").strip().lower()
+    p = list(float(x) for x in params)
+
+    def scale_lf_affinity_middle() -> list[float]:
+        out = list(p)
+        for i in range(1, len(out), 3):
+            out[i] = out[i] / 1000.0
+        return out
+
+    ft_nohyphen = ft.replace("-", "")
+    if ft_nohyphen == "langmuirfreundlich" or ft in ("lf",):
+        return scale_lf_affinity_middle()
+
+    if ft == "sips":
+        n_sites = len(p) // 3
+        for i in range(n_sites):
+            i_k = 3 * i + 1
+            i_m = 3 * i + 2
+            if i_k < len(p) and i_m < len(p):
+                k_val, m_val = float(p[i_k]), float(p[i_m])
+                p[i_k] = k_val / (1000.0**m_val)
+        return p
+
+    if ft == "toth":
+        return scale_lf_affinity_middle()
+
+    # Default: multi-site triples with affinity in the middle (dual-site Langmuir, legacy files).
+    if len(p) >= 3 and len(p) % 3 == 0:
+        return scale_lf_affinity_middle()
+    return p
+
+
+def load_fitting_data(filepath, pressure_unit='Pa'):
     """
     Load fitting data from file.
 
     Supported layout (tab- or space-separated):
-    - Columns: Framework, Temperature, Molecule, Mixture/Pure, FittingType, FinalParameters...
-    - pressure_unit: 'kPa' or 'Pa'; if 'kPa', K parameters are converted to 1/Pa.
+    - Columns: Framework, Temperature, Molecule, FittingType, then floats …
+
+    ``pressure_unit`` (from ``config.in``): ``Pa`` (default, no conversion) or ``kPa``.
+    When ``kPa``, parameters are converted to Pa-pressure form via
+    :func:`convert_fitting_params_kpa_pressure_to_pa` (LF / Langmuir–Freundlich, Sips,
+    Tóth, dual-site triples).
+
+    Rows require at least 8 columns total (fitting type + minimal parameters).
     """
     fittings = []
     with open(filepath, "r") as f:
@@ -34,7 +97,7 @@ def load_fitting_data(filepath, pressure_unit='kPa'):
             if not line or line.startswith("#"):
                 continue
             parts = line.split()
-            # Framework, Temperature, Molecule, Mixture/Pure, FittingType, then at least 3 params
+            # Framework, Temperature, Molecule, FittingType, then parameter floats …
             if len(parts) < 8:
                 continue
             fw = parts[0]
@@ -46,9 +109,8 @@ def load_fitting_data(filepath, pressure_unit='kPa'):
             except (ValueError, TypeError):
                 continue
 
-            if pressure_unit == 'kPa':
-                for i in range(1, len(params), 3):
-                    params[i] = params[i] / 1000.0
+            if pressure_input_is_kpa(pressure_unit):
+                params = convert_fitting_params_kpa_pressure_to_pa(params, fit_type)
 
             fittings.append({
                 "framework": fw,
@@ -59,15 +121,20 @@ def load_fitting_data(filepath, pressure_unit='kPa'):
             })
     return fittings
 
-def load_RASPA_data(filepath, pure_only=True):
+def load_RASPA_data(filepath, pure_only=True, pressure_unit='Pa'):
     """
     Load data points from file.
 
     Supported layouts (whitespace-separated):
-    - Compact (6 cols): framework, molecule, mixture_pure, T[K], P[Pa], loading.
+    - Compact (6 cols): framework, molecule, mixture_pure, T[K], P, loading.
     - RASPA wide export (>=11 cols): T, P, loading, ... optional columns ...,
       then molecule, framework, mixture (``-`` or ``pure`` for pure component).
+
+    ``pressure_unit`` matches ``PRESSURE_UNIT`` in config.in: file pressures are **Pa**
+    unless this indicates kPa, in which case each row pressure is multiplied by 1000
+    so downstream code always sees **Pa**.
     """
+    scale_kpa_to_pa = pressure_input_is_kpa(pressure_unit)
     data = []
     with open(filepath, "r") as f:
         for line in f:
@@ -87,6 +154,8 @@ def load_RASPA_data(filepath, pure_only=True):
                     mixture_pure = parts[2]
                     temperature = float(parts[3])
                     pressure = float(parts[4])
+                    if scale_kpa_to_pa:
+                        pressure *= 1000.0
                     loading = float(parts[5])
                 except (ValueError, IndexError):
                     continue
@@ -108,6 +177,8 @@ def load_RASPA_data(filepath, pure_only=True):
                 try:
                     temperature = float(parts[0])
                     pressure = float(parts[1])
+                    if scale_kpa_to_pa:
+                        pressure *= 1000.0
                     loading = float(parts[2])
                     molecule = parts[-3]
                     framework = parts[-2]

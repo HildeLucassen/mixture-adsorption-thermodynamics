@@ -4,9 +4,9 @@ ADSORBATE               xx                      # space/comma-separated list; e.
 TEMPERATURE             [xx,xx,xx,xx]           # K; leave blank to auto-select from fittings, minimum 3 Temperatures
 FIT_TYPE                xx                      # space/comma-separated list; e.g. Sips, Toth, Langmuir-Freundlich
 NUM_ISOTHERM_SITES      xx                      # example dual-sided Sips = 2
-P_MIN                   xx                      # Pa
-P_MAX                   xx                      # Pa
-PRESSURE_UNIT           xx
+P_MIN                   xx                      # same unit as PRESSURE_UNIT
+P_MAX                   xx                      # same unit as PRESSURE_UNIT 
+PRESSURE_UNIT           xx                      # Pa or kPa
 PRESSURE_SCALE          xx                      # log,linear or both
 
 # ---- Input data ----
@@ -27,13 +27,13 @@ VIRIAL_DEGREES          (x, x)                              # Ignored when SUGGE
 # VIRIAL_DEGREES_COMBO  adsorbent  adsorbate  x  x          # one line per (structure, molecule); overrides VIRIAL_DEGREES for that pair when SUGGESTION_VIRIAL = no
 
 # ---- Storage density parameters ----
-P_DES_MIN               xx                 # Pa, minimum desorption pressure
-P_DES_MAX               xx                 # Pa, maximum desorption pressure
+P_DES_MIN               xx                 # minimum desorption pressure (same unit as PRESSURE_UNIT)
+P_DES_MAX               xx                 # maximum desorption pressure (same unit as PRESSURE_UNIT)
 T_ADS                   xx                 # K,  fixed adsorption temperature
-P_ADS                   xx                 # Pa, fixed adsorption pressure
+P_ADS                   xx                 # fixed adsorption pressure (same unit as PRESSURE_UNIT)
 T_DES                   [xx,xx,xx,xx]      # K,  desorption temperatures (default: seleted temperatures)
-P_ADS_TT                xx                 # Pa, adsorption pressure  (T_ads–T_des 3D plot)
-P_DES_TT                xx                 # Pa, desorption pressure  (T_ads–T_des 3D plot)
+P_ADS_TT                xx                 # adsorption pressure, T_ads–T_des 3D plot (same unit as PRESSURE_UNIT)
+P_DES_TT                xx                 # desorption pressure, T_ads–T_des 3D plot (same unit as PRESSURE_UNIT)
 
 # ---- Calculation ----
 N_LOADINGS              xx                 # Amount of points used for heat of adsorption

@@ -3,7 +3,7 @@ import importlib.util
 
 
 BASE_DIR = Path(__file__).resolve().parent
-TOOL_PATH = BASE_DIR / "Code" / "formatting_tool.py"
+TOOL_PATH = BASE_DIR /"Code" / "formatting_tool.py"
 
 def _load_tool(path: Path):
     spec = importlib.util.spec_from_file_location("formatting_tool", str(path))

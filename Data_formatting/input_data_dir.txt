@@ -1,3 +1,38 @@
-# Input data folder for Data_formatting/Code/formatting_tool.py
-# You can use either an absolute path or a path relative to Data_formatting/.
-Data
+# -----------------------------------------------------------------------------
+# Data_formatting/input_data_dir.txt  (config.in style: KEY  value  # comment)
+# -----------------------------------------------------------------------------
+#
+# Put optional shared lines first (DATA_PATH, DATA_GLOB, defaults). Then, for
+# each raw file under DATA_PATH, add a FILE line (name or path under that folder)
+# and put every setting for that file on the lines below it.
+#
+# FILE value: basename only (e.g. sim-….load) or path like subfolder/out.load
+#
+# KIND: pts | hoa | skip
+# TEMPERATURE: Kelvin 
+#
+# -----------------------------------------------------------------------------
+# ---- Data source  -------------
+# -----------------------------------------------------------------------------
+
+DATA_PATH               Data                               # folder under Data_formatting/
+DATA_GLOB               **/*                               # which files under DATA_PATH are processed
+
+STRUCTURE               Bhatia_03                                  # adsorbent (override beneath FILE if needed)
+PRESSURE_UNIT           Pa                                 # labels Pressure column in Output header
+MOLECULE                R32
+MIXTURE_PURE            pure
+PRESSURE                1
+LOADING                 2
+# -----------------------------------------------------------------------------
+# ---- Per-file blocks --------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+FILE                    sim-R32-aCarbon-Bhatia-id003_clean-333K.load
+TEMPERATURE             333
+KIND                    pts
+
+
+FILE                    sim-R32-aCarbon-Bhatia-id003_clean-333K-heat.load
+KIND                    hoa
+DELTAH                  7
