@@ -7,7 +7,6 @@ The pipeline for the code, as described in the figure below
 ![Workflow](Workflow.png)
 
 
-
 ##  Configuration
 
 | File | Role |
@@ -147,7 +146,16 @@ run.py              # Wrapper: run Main.py from repo root
 Workflow.png        # High-level workflow diagram for the README
 ```
 
+## License
+
+This project is licensed under the **MIT License**. See [`LICENSE.txt`](LICENSE.txt) in the repository root for the full text.
+
+## Citing
+
+If you use this software in academic work, please cite it as described by GitHub:
+
+- Use the repository page **“Cite this repository”** control (filled from [`CITATION.cff`](CITATION.cff)), or  
+- Read the citation metadata directly in **`CITATION.cff`** at the repo root.
 
 ---
-
 

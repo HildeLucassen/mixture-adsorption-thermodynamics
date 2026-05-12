@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: "Mixture adsorption thermodynamics"
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Lucassen"
+    given-names: "Hilde"
+  - family-names: "Vicent-Luna"
+    given-names: "Jose Manuel"
+  - family-names: "Luna-Triguero"
+    given-names: "Azahara"
+version: "1.0.0"
+date-released: "2026-05-12"
