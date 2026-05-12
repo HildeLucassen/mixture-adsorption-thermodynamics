@@ -158,7 +158,6 @@ If you use this software in academic work, please cite it as described by GitHub
 - Read the citation metadata directly in **`CITATION.cff`** at the repo root.
 
 ## Authorship
-This project started development during Flavian's Bachelor's End Project at Eindhoven University of Technology.
 
 Authors: H.A. Lucassen [1], A. Luna-Triguero [1, 2], and J. M. Vicent-Luna [2]
 
