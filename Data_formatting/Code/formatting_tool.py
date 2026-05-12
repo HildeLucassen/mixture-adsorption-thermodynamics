@@ -1,7 +1,7 @@
 """
 formatting_tool.py
 ==================
-Batch-only: reads [`input_data_dir.txt`](../input_data_dir.txt) like ``template/config.in``,
+Batch-only: reads [`config.txt`](../config.txt) like ``template/config.in``,
 with **one ``FILE …`` heading per raw file** (path under ``DATA_PATH`` or just the basename) and **all settings on the lines beneath it**.
 
 Temperature is given explicitly per file via ``TEMPERATURE`` (Kelvin string or number)—no modes.
@@ -25,7 +25,7 @@ from typing import Any, NamedTuple
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_DIR = SCRIPT_DIR.parent
-INPUT_PATH_FILE = PROJECT_DIR / "input_data_dir.txt"
+INPUT_PATH_FILE = PROJECT_DIR / "config.txt"
 
 OUTPUT_DIR = PROJECT_DIR / "Output"
 TARGET_HOA = OUTPUT_DIR / "data_heat_of_adsorption.txt"
@@ -170,7 +170,7 @@ def load_format_config() -> FormatConfig:
 
     if not file_blocks:
         print(
-            "ERROR: No FILE blocks in input_data_dir.txt. Use one block per data file, e.g.\n"
+            "ERROR: No FILE blocks in config.txt. Use one block per data file, e.g.\n"
             "  FILE  sim-…333K.load\n"
             "  STRUCTURE …\n"
             "  MOLECULE …\n"
@@ -319,22 +319,6 @@ def _is_data_line(line: str) -> bool:
     return bool(line) and (line[0].isdigit() or line[0] in "-.")
 
 
-def _peek_header(filepath: Path) -> list[str]:
-    headers: list[str] = []
-    try:
-        with open(filepath, encoding="utf-8", errors="replace") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                if _is_data_line(line):
-                    break
-                headers.append(line)
-    except OSError:
-        pass
-    return headers
-
-
 def _read_data_rows(filepath: Path) -> list[list[str]]:
     rows: list[list[str]] = []
     with open(filepath, encoding="utf-8", errors="replace") as fh:
@@ -452,9 +436,6 @@ def main() -> None:
         if kind == "skip":
             print("  Skipped (KIND skip).\n")
             continue
-
-        for h in _peek_header(filepath):
-            print(f"  Header: {h}")
 
         if kind == "hoa":
             err, hp = _validate_and_prepare_hoa(filepath, merged)

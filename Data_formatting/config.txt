@@ -1,5 +1,5 @@
 # -----------------------------------------------------------------------------
-# Data_formatting/input_data_dir.txt  (config.in style: KEY  value  # comment)
+# Data_formatting/config.txt  (config.in style: KEY  value  # comment)
 # -----------------------------------------------------------------------------
 #
 # Put optional shared lines first (DATA_PATH, DATA_GLOB, defaults). Then, for

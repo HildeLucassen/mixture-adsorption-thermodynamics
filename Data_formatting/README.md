@@ -1,32 +1,51 @@
 # Data Formatting Tool
 
-Interactive tool that converts output files into the two
-input formats used by the adsorption-thermodynamics pipeline:
+Batch tool that converts raw RASPA-style text files into the two input formats
+used by the adsorption-thermodynamics pipeline:
 
 | Output file | Used for |
 |---|---|
 | `data_points.txt` | Adsorption isotherms (loading vs. pressure) |
 | `data_heat_of_adsorption.txt` | Isosteric heat of adsorption data |
 
+All paths, globs, column mapping, and per-file options are set in
+`Data_formatting/config.txt` (same idea as `KEY  value  # comment` in
+`template/config.in`). There is no interactive mode.
+
 ## Quick start
 
-**1. Set the input data folder**
+**1. Edit `config.txt`**
 
-Open `Data_formatting/input_data_dir.txt` and replace the path with the folder
-that contains your raw RASPA files.  You can use either an absolute or a
-relative path (relative to `Data_formatting/`).
+- Put shared settings first: `DATA_PATH`, `DATA_GLOB`, and any defaults
+  (`STRUCTURE`, `MOLECULE`, `MIXTURE_PURE`, `PRESSURE_UNIT`, `PRESSURE`, `LOADING`, …).
+- For each raw file you want to process, add a `FILE` line (basename or path under
+  `DATA_PATH`, or a glob with `*` / `?`), then the options for that file on the
+  lines below.
+
+Comments: anything after `#` on a line is ignored (full-line `# …` blocks or
+trailing `# comment` after the value).
+
+Example (see the checked-in `config.txt` for a full template):
 
 ```
-# input_data_dir.txt
-# Absolute path example:
-C:\Users\you\simulations\my_run\
+DATA_PATH               Data                    # folder under Data_formatting/
+DATA_GLOB               **/*                    # which files are scanned
 
-# Relative path example (relative to Data_formatting/):
-Data
+STRUCTURE               Bhatia_03
+MOLECULE                R32
+MIXTURE_PURE            pure
+PRESSURE_UNIT           Pa                      # used in the points-file header
+PRESSURE                1
+LOADING                 2
+
+FILE                    sim-…-333K.load
+TEMPERATURE             333
+KIND                    pts
+
+FILE                    sim-…-333K-heat.load
+KIND                    hoa
+DELTAH                  7
 ```
-
-Lines starting with `#` are ignored.  If the file is missing or empty the tool
-falls back to `Data_formatting/Example/Data`.
 
 **2. Run the tool**
 
@@ -34,41 +53,54 @@ falls back to `Data_formatting/Example/Data`.
 python run.py
 ```
 
-The tool walks through every file in the input folder, shows you the header of
-each file, and asks a short series of questions to map the columns.
+(from `Data_formatting/`, or run `python Code/formatting_tool.py` from the same
+folder.)
+
+The tool scans every file under `DATA_PATH` that matches `DATA_GLOB`. If a file
+has no matching `FILE` block, it is skipped with a warning.
 
 **3. Check the output**
 
-Formatted rows are appended to:
+Each run **replaces** (does not append to) the aggregate files:
 
 ```
 Data_formatting/Output/data_points.txt
 Data_formatting/Output/data_heat_of_adsorption.txt
 ```
 
-Copy these files into the `Input/` folder of your pipeline example to use them.
+Copy these into the `Input/` folder of your pipeline example to use them.
 
 ---
 
-## Interactive questions
+## Configuration reference
 
-For each raw file you will be asked:
+| Key | Where | Meaning |
+|---|---|---|
+| `DATA_PATH` | Top | Folder with raw files. Absolute path, or relative to `Data_formatting/`. Default if omitted: `Example/Data`. |
+| `DATA_GLOB` | Top | Glob passed to `Path.glob` under `DATA_PATH` (default `**/*`). |
+| `FILE` | Starts a block | Basename (`sim-….load`), relative path (`sub/out.load`), or pattern (`**/sim-*.load`). |
+| `KIND` | Default or block | `pts` (isotherm), `hoa` (heat of adsorption), or `skip`. Default `pts` when unset. |
+| `STRUCTURE` | Default / block | Adsorbent name. |
+| `MOLECULE` | Default / block | Adsorbate name. |
+| `TEMPERATURE` | Usually block | **Required for `KIND pts`.** Temperature in kelvin (`KIND hoa` does not use it). |
+| `MIXTURE_PURE` | Default / block | Stored in the points file; use `pure` or your mixture label (`pure` is normalized to lowercase `pure`). |
+| `PRESSURE_UNIT` | Default | Label for the pressure column in the points header (default `Pa`). |
+| `PRESSURE` | Default / block | 1-based column index for pressure (`PRESSURE_COLUMN` is an alias). |
+| `LOADING` | Default / block | 1-based column index for loading (`LOADING_COLUMN` is an alias). |
+| `DELTAH` | Default / block | 1-based column index for ΔH (`DELTAH_COLUMN` is an alias). Required for `KIND hoa`. |
 
-| Question | Options |
-|---|---|
-| File type | `1` = heat of adsorption, `2` = isotherm (data points), `s` = skip |
-| Is the adsorbent name in the file? | yes / no |
-| Column numbers for each quantity | 1-based integer |
-| Temperature (if not in the file) | the tool tries to read it from the filename, e.g. `333K` |
-| Pure or mixture? | `pure` / `mixture` |
+Settings above the first `FILE` line apply to all blocks unless overridden in a
+block. If several `FILE` patterns match the same disk file, later blocks in the
+file win when merging options.
+
+Rows in raw files must start with a digit, `-`, or `.` to count as data; other
+lines are treated as headers and skipped.
 
 ---
 
 ## Example raw file format
 
-The tool reads any whitespace- or tab-separated text file.  Lines that do not
-start with a digit, `-`, or `.` are treated as header/comment lines and
-skipped automatically.
+The tool reads whitespace- or tab-separated text files.
 
 **Isotherm file** (`sim-R32-aCarbon-333K.load`):
 
@@ -78,7 +110,7 @@ skipped automatically.
 3.0e+00   0.0001   0.0003   ...
 ```
 
-Column 1 = pressure [Pa], column 2 = loading [mol/kg].
+Set `PRESSURE 1`, `LOADING 2`, `KIND pts`, and `TEMPERATURE` for that file.
 
 **Heat-of-adsorption file** (`sim-R32-aCarbon-333K-heat.load`):
 
@@ -88,36 +120,34 @@ Column 1 = pressure [Pa], column 2 = loading [mol/kg].
 3.0e+00   0.0000   ...   -14.896      7.321
 ```
 
-Column 2 = loading [mol/kg], column 7 = heat of adsorption [kJ/mol].
-Negative values are automatically stored as positive (the tool detects the
-sign convention and negates if all values are negative).
+Typical mapping: `LOADING 2`, `DELTAH 7`, `KIND hoa`. If every ΔH value is
+negative, the tool stores the negated values as positive magnitudes.
 
 ---
 
 ## Output file formats
 
-**`data_points.txt`**
+**`data_points.txt`** (header uses `PRESSURE_UNIT`, e.g. `Pa`):
 
 ```
-Structure    Molecule    Mixture/Pure    Temperature    Pressure    Loading mol/kg
-Bhatia_01    R32         pure            333            1.0         0.0000
-Bhatia_01    R32         pure            333            3.0         0.0001
+Structure	Molecule	Mixture/Pure	Temperature [K]	Pressure [Pa]	Loading [mol/kg]
+Bhatia_03	R32	pure	333	1.0	0.0000
 ```
 
 **`data_heat_of_adsorption.txt`**
 
 ```
-#Structure    Molecule    Loading (mol/kg)    Heat of Adsorption (kJ/mol)
-Bhatia_01     R32         0.0000              14.896
+#Structure	Molecule	Loading [mol/kg]	Heat of Adsorption [kJ/mol]
+Bhatia_03	R32	0.0000	14.896
 ```
 
 ---
 
 ## Notes
 
-- The tool **appends** to existing output files — it does not overwrite them.
-  Delete the output files before a fresh run if you want to start clean.
-- The tool tries to read the temperature automatically from filenames
-  containing a pattern like `333K`.  If it cannot, it will ask you.
-- The `formatting_tool.py` inside `Code/` reads its source path from
-  `input_data_dir.txt` automatically; you do not need to edit it directly.
+- The configuration file **`config.txt` must exist**; there is no silent
+  fallback when it is missing. If `DATA_PATH` is omitted, the tool defaults to
+  `Example/Data` under `Data_formatting/`.
+- At least one `FILE` block is required; otherwise the tool exits with an error.
+- **`formatting_tool.py`** reads only `config.txt`; you do not need to
+  edit Python to change folders or columns.
