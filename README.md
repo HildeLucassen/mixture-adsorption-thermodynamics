@@ -157,5 +157,15 @@ If you use this software in academic work, please cite it as described by GitHub
 - Use the repository page **“Cite this repository”** control (filled from [`CITATION.cff`](CITATION.cff)), or  
 - Read the citation metadata directly in **`CITATION.cff`** at the repo root.
 
+## Authorship
+This project started development during Flavian's Bachelor's End Project at Eindhoven University of Technology.
+
+Authors: H.A. Lucassen [1], A. Luna-Triguero [1, 2], and J. M. Vicent-Luna [2]
+
+[1] Energy Technology, Department of Mechanical Engineering, Eindhoven University of Technology
+
+[2] Eindhoven Institute for Renewable Energy Systems (EIRES), Eindhoven University of Technology
+
 ---
+
 
